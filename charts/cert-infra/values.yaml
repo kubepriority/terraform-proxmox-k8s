@@ -1,0 +1,5 @@
+acmeEmail: hudson.erik@gmail.com
+gcpProject: project-90293a0a-5d49-4604-a23
+domain: kubepriority.com.br
+# Conteudo do key.json da service account (injetado pelo Terraform, nunca commitado)
+gcpSaKeyJson: ""

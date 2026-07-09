@@ -1,0 +1,5 @@
+apiVersion: v2
+name: cert-infra
+description: Secret GCP, ClusterIssuer DNS-01 e Certificate wildcard
+type: application
+version: 0.1.0
