@@ -1,0 +1,5 @@
+apiVersion: v2
+name: metallb-config
+description: IPAddressPool e L2Advertisement para MetalLB (pos-instalacao)
+type: application
+version: 0.1.0
