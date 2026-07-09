@@ -8,7 +8,7 @@ This project automates the deployment of a Kubernetes cluster on Proxmox using T
 - **Proxmox VE**: Hypervisor for running our VMs.
 - **Kubernetes (v1.30)**: Kubeadm for cluster setup, Calico for networking.
 - **BIND9**: Optional DNS server for `homelab.local` resolution.
-- **Ubuntu 22.04**: Base image for all VMs.
+- **Ubuntu 24.04**: Base image for all VMs.
 - **containerd**: Container runtime for K8s.
 
 ## 📋 Prerequisites
@@ -19,7 +19,7 @@ Before you kick things off, make sure you’ve got:
 - Terraform 1.3+ installed locally.
 - SSH key pair (put your public key in `[id_rsa.pub](id_rsa.pub)`).
 - Proxmox API access with a user and password (or token, but we’re using password here).
-- A network bridge (`vmbr0`) configured in Proxmox.
+- A network bridge (default `vmbr1`, configurable via `proxmox_network_bridge`) configured in Proxmox, with the CIDR of your choice (default `10.10.10.0/24`, configurable via `proxmox_network_prefix`). If the bridge is internal-only, enable NAT/IP forwarding on the Proxmox host so VMs reach the internet during cloud-init.
 - Enough resources for VMs (e.g., 1 DNS VM, 1+ control plane, 3+ worker nodes).
 
 ## 🚀 Getting Started
@@ -50,10 +50,12 @@ proxmox_vm_password = "your-vm-password"
 # Cluster config
 proxmox_node_name = "proxmox"
 proxmox_datastore_name = "local"
+proxmox_network_bridge = "vmbr1"
+proxmox_network_prefix = "10.10.10"
 proxmox_number_of_vm_k8s_control_plane = "1"
 proxmox_number_of_vm_k8s_worker_node = "3"
-k8s_control_plane_ip_start = "50"  # First control plane IP: 192.168.100.50
-k8s_worker_ip_start = "60"        # First worker IP: 192.168.100.60
+k8s_control_plane_ip_start = "50"  # First control plane IP: 10.10.10.50
+k8s_worker_ip_start = "60"        # First worker IP: 10.10.10.60
 ```
 
 Check out all variables in `[variables.tf](variables.tf)` for defaults and descriptions. Key ones to set:
@@ -61,12 +63,12 @@ Check out all variables in `[variables.tf](variables.tf)` for defaults and descr
 - `proxmox_endpoint`: Your Proxmox API URL (e.g., `https://<proxmox-ip>:8006/api2/json`).
 - `proxmox_user_name` and `proxmox_user_password`: API credentials.
 - `proxmox_vm_user` and `proxmox_vm_password`: User for SSH into VMs.
-- `k8s_control_plane_ip_start` and `k8s_worker_ip_start`: Starting IPs for control plane and worker nodes (e.g., `50` for `192.168.100.50`).
+- `k8s_control_plane_ip_start` and `k8s_worker_ip_start`: Starting IPs for control plane and worker nodes (e.g., `50` for `10.10.10.50`).
 - `proxmox_number_of_vm_k8s_control_plane` and `proxmox_number_of_vm_k8s_worker_node`: Number of control plane and worker nodes.
 
 ### 3. Optional: DNS Server
 
-This project includes a BIND9 DNS server module that sets up a VM at `192.168.100.3` for `homelab.local`. It’s super handy for local DNS resolution, but you don’t have to use it if you’ve got your own DNS server.
+This project includes a BIND9 DNS server module that sets up a VM at `10.10.10.3` for `homelab.local`. It’s super handy for local DNS resolution, but you don’t have to use it if you’ve got your own DNS server.
 
 #### If you skip the DNS module:
 
@@ -79,7 +81,7 @@ This project includes a BIND9 DNS server module that sets up a VM at `192.168.10
 - Update the `/etc/resolv.conf` in the Kubernetes module’s cloud-init config (`[modules/proxmox/main.tf](modules/proxmox/main.tf)`). Replace:
 
   ```yaml
-  nameserver 192.168.100.3
+  nameserver 10.10.10.3
   ```
 
   with your DNS server’s IP, like:
@@ -107,8 +109,8 @@ terraform apply --auto-approve
 
 This will:
 
-- Spin up a DNS VM (if enabled) at `192.168.100.3`.
-- Create control plane VMs (e.g., `k8s-control-plane-0` at `192.168.100.50`) and worker nodes (e.g., `k8s-worker-0` at `192.168.100.60`).
+- Spin up a DNS VM (if enabled) at `10.10.10.3`.
+- Create control plane VMs (e.g., `k8s-control-plane-0` at `10.10.10.50`) and worker nodes (e.g., `k8s-worker-0` at `10.10.10.60`).
 - Configure each VM with cloud-init to install containerd, kubeadm, and Calico CNI.
 - Bootstrap the K8s cluster using kubeadm, with the first control plane node running a temporary HTTP server (port 8000) to share the join token.
 
@@ -117,7 +119,7 @@ This will:
 Once `terraform apply` finishes (takes ~7-12 minutes), SSH into the first control plane node (`k8s-control-plane-0`):
 
 ```bash
-ssh ubuntu@192.168.100.50
+ssh ubuntu@10.10.10.50
 ```
 
 Check the cluster:
@@ -129,13 +131,57 @@ kubectl get nodes
 
 You should see your control plane and worker nodes in `Ready` state. The kubeconfig is already set up at `/home/ubuntu/.kube/config` on the first control plane node.
 
+### 6. Deploy Kubernetes Addons (MetalLB, ingress-nginx, cert-manager)
+
+The `k8s-addons` module installs MetalLB, ingress-nginx and cert-manager with a
+wildcard Let's Encrypt certificate (`*.kubepriority.com.br`) issued via DNS-01
+on Google Cloud DNS. Run these steps from a machine with SSH access to the OVH
+host, at the repo root, after the cluster nodes are `Ready`.
+
+1. Fetch the kubeconfig and open the tunnel to the cluster API:
+
+   ```bash
+   ./scripts/get-kubeconfig.sh
+   ssh -fN -L 6443:10.10.10.50:6443 root@139.99.62.36
+   ```
+
+2. Apply (the GCP service account key must exist at
+   `kubernetes/lets-encrypt-dns-google/cert-manager-dns01.json` — it is
+   gitignored and never committed):
+
+   ```bash
+   terraform init
+   terraform apply
+   ```
+
+3. On the Proxmox host (as root), forward ports 80/443 to the ingress VIP:
+
+   ```bash
+   ./scripts/proxmox-dnat.sh
+   ```
+
+4. Public DNS (Google Cloud DNS, zone `kubepriority.com.br`): create `A`
+   records for `kubepriority.com.br` and `*.kubepriority.com.br` pointing to
+   `139.99.62.36`.
+
+5. Validate the wildcard certificate (DNS-01 issuance takes a few minutes):
+
+   ```bash
+   KUBECONFIG=./kubeconfig kubectl -n ingress-nginx get certificate
+   # wait for READY=True, then:
+   curl -v https://anything.kubepriority.com.br
+   ```
+
+Any `Ingress` with a `tls` block automatically uses the wildcard certificate
+(`--default-ssl-certificate`); no need to repeat `secretName`.
+
 ## 🐛 Debugging Tips
 
 If something goes wonky, don’t panic! Here’s how to troubleshoot:
 
 - **Check Terraform logs**: Look at the output of `terraform apply` for errors (e.g., wrong Proxmox credentials).
 
-- **VM logs**: SSH into a VM (e.g., `ssh ubuntu@192.168.100.50`) and check:
+- **VM logs**: SSH into a VM (e.g., `ssh ubuntu@10.10.10.50`) and check:
 
   - `/tmp/cloud-init.log`: Main log for Kubernetes setup (control plane/worker nodes).
   - `/tmp/dns-config.log`: DNS server setup log (if using BIND9 module).
@@ -144,7 +190,7 @@ If something goes wonky, don’t panic! Here’s how to troubleshoot:
 
 - **DNS issues**:
 
-  - Run `nslookup ns1.homelab.local 192.168.100.3` on a VM to test DNS resolution.
+  - Run `nslookup ns1.homelab.local 10.10.10.3` on a VM to test DNS resolution.
   - If using your own DNS, verify `/etc/resolv.conf` has the right `nameserver`.
 
 - **Kubernetes issues**:
@@ -176,7 +222,9 @@ Here’s a quick rundown of the repo’s layout:
 
 - `[modules/bind9_dnsserver/](modules/bind9_dnsserver/)`: Sets up the BIND9 DNS server.
 - `[modules/proxmox/](modules/proxmox/)`: Deploys the Kubernetes cluster VMs.
-- `[modules/helm/](modules/helm/)`: Future Helm module for Prometheus/Grafana (commented out for now).
+- `[modules/k8s-addons/](modules/k8s-addons/)`: Installs MetalLB, ingress-nginx and cert-manager (wildcard TLS) via Helm.
+- `[charts/](charts/)`: Local helper charts (`metallb-config`, `cert-infra`) applied by the `k8s-addons` module.
+- `[scripts/](scripts/)`: `get-kubeconfig.sh` (fetch kubeconfig via SSH jump) and `proxmox-dnat.sh` (forward 80/443 to the ingress VIP).
 
 The `[.gitignore](.gitignore)` ensures sensitive files like `secret.auto.tfvars` and Terraform state aren’t versioned. Keep it that way for security! 🔒
 
@@ -184,14 +232,13 @@ The `[.gitignore](.gitignore)` ensures sensitive files like `secret.auto.tfvars`
 
 Here’s the big picture:
 
-- **DNS VM (optional)**: Runs BIND9 at `192.168.100.3`, resolving `homelab.local`.
-- **Control Plane VMs**: Run kubeadm to bootstrap the cluster, starting at `192.168.100.50`.
-- **Worker Nodes**: Join the cluster, starting at `192.168.100.60`, with extra disk for OpenEBS.
+- **DNS VM (optional)**: Runs BIND9 at `10.10.10.3`, resolving `homelab.local`.
+- **Control Plane VMs**: Run kubeadm to bootstrap the cluster, starting at `10.10.10.50`.
+- **Worker Nodes**: Join the cluster, starting at `10.10.10.60`, with extra disk for OpenEBS.
 - **Networking**: Calico CNI with pod subnet `10.45.0.0/16`, VXLAN encapsulation.
 
 ## 🔮 Coming Soon
 
-- **Helm Charts**: There’s a TODO in `[main.tf](main.tf)` to add Helm for deploying Prometheus and Grafana (with OpenEBS storage). Stay tuned for monitoring goodness! 📈
 - **IA Node**: Planning to dedicate a node for AI workloads (maybe with Ollama, see the TODO).
 
 ## 📬 Contributing
