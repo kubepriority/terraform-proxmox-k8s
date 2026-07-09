@@ -40,3 +40,9 @@ terraform.rc
 # Ignore private ssh key
 id_rsa
 
+# GCP service account key (cert-manager DNS-01) - NUNCA commitar
+kubernetes/lets-encrypt-dns-google/*.json
+
+# kubeconfig local gerado por scripts/get-kubeconfig.sh
+kubeconfig
+

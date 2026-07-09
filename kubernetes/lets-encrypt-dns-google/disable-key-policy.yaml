@@ -1,0 +1,4 @@
+name: organizations/401537555346/policies/iam.disableServiceAccountKeyCreation
+spec:
+  rules:
+  - enforce: false
