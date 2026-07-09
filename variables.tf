@@ -55,10 +55,22 @@ variable "proxmox_node_name" {
   default     = "proxmox"
 }
 
+variable "proxmox_network_bridge" {
+  description = "Proxmox network bridge for VM NICs"
+  type        = string
+  default     = "vmbr1"
+}
+
+variable "proxmox_network_prefix" {
+  description = "First three octets of the VM network (e.g. 10.10.10)"
+  type        = string
+  default     = "10.10.10"
+}
+
 variable "proxmox_datastore_name" {
   description = "Proxmox datastore"
-  type = string
-  default = "local"
+  type        = string
+  default     = "local"
 }
 variable "prometheus_metrics_server_replicas" {
   type        = string
@@ -100,4 +112,16 @@ variable "grafana_storageclass_name" {
   type        = string
   description = "Storage class name"
   default     = "openebs"
+}
+variable "kubeconfig_path" {
+  type        = string
+  description = "Caminho do kubeconfig do cluster (gerado por scripts/get-kubeconfig.sh)"
+  default     = "./kubeconfig"
+}
+
+variable "gcp_sa_key_path" {
+  type        = string
+  description = "Caminho local do key.json da service account cert-manager-dns01"
+  sensitive   = true
+  default     = "./kubernetes/lets-encrypt-dns-google/cert-manager-dns01.json"
 }

@@ -27,3 +27,10 @@ module "proxmox" {
   proxmox_network_prefix                 = var.proxmox_network_prefix
 
 }
+
+module "k8s_addons" {
+  source          = "./modules/k8s-addons"
+  gcp_sa_key_path = var.gcp_sa_key_path
+
+  depends_on = [module.proxmox]
+}
