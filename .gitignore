@@ -44,7 +44,7 @@ id_rsa
 kubernetes/lets-encrypt-dns-google/*.json
 
 # kubeconfig local gerado por scripts/get-kubeconfig.sh
-kubeconfig
+kubeconfig*
 
 
 # Configs de cliente WireGuard (chaves privadas)
