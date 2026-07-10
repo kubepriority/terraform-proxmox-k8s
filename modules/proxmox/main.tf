@@ -1,12 +1,26 @@
 # Kubernetes Cloud-Init Configuration
+# LEGADO/CONGELADO: usado pelas VMs criadas antes do HA (control-plane-0 e
+# workers). ignore_changes evita que mudanca no template recrie essas VMs.
+# Conteudo canonico vive em templates/cloud-config.yaml.tftpl (resource
+# k8s_cloud_config_ha). Consolidar os dois na proxima recriacao total.
 resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
   content_type = "snippets"
   datastore_id = var.proxmox_datastore_name
   node_name    = var.proxmox_node_name
 
+  lifecycle {
+    ignore_changes = [source_raw]
+  }
+
   source_raw {
     data = <<-EOF
     #cloud-config
+    bootcmd:
+      # /etc/resolv.conf is a symlink into tmpfs (/run) managed by systemd-resolved;
+      # once resolved is disabled the target vanishes on reboot, leaving the VM
+      # without DNS. Replace it with a real file on every boot.
+      - rm -f /etc/resolv.conf
+      - printf 'nameserver ${var.proxmox_network_prefix}.3\nnameserver 8.8.8.8\nsearch homelab.local\n' > /etc/resolv.conf
     disk_setup:
       ephemeral0:
         table_type: mbr
@@ -34,18 +48,18 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
       - path: /etc/hosts
         content: |
           127.0.0.1 localhost
-          192.168.100.3 bind9-dns-server bind9-dns-server.homelab.local ns1.homelab.local dns.homelab.local homelab.local
-          ${format("192.168.100.%d", var.k8s_control_plane_ip_start)} k8s-control-plane-0 k8s-control-plane-0.homelab.local
-          %{~ for i in range(1, var.proxmox_number_of_vm_k8s_control_plane) ~}
-          ${format("192.168.100.%d", var.k8s_control_plane_ip_start + i)} k8s-control-plane-${i} k8s-control-plane-${i}.homelab.local
-          %{~ endfor ~}
-          %{~ for i in range(var.proxmox_number_of_vm_k8s_worker_node) ~}
-          ${format("192.168.100.%d", var.k8s_worker_ip_start + i)} k8s-worker-${i} k8s-worker-${i}.homelab.local
-          %{~ endfor ~}
+          ${var.proxmox_network_prefix}.3 bind9-dns-server bind9-dns-server.homelab.local ns1.homelab.local dns.homelab.local homelab.local
+          ${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start)} k8s-control-plane-0 k8s-control-plane-0.homelab.local
+          %{~for i in range(1, var.proxmox_number_of_vm_k8s_control_plane)~}
+          ${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start + i)} k8s-control-plane-${i} k8s-control-plane-${i}.homelab.local
+          %{~endfor~}
+          %{~for i in range(var.proxmox_number_of_vm_k8s_worker_node)~}
+          ${format("%s.%d", var.proxmox_network_prefix, var.k8s_worker_ip_start + i)} k8s-worker-${i} k8s-worker-${i}.homelab.local
+          %{~endfor~}
         permissions: '0644'
       - path: /etc/resolv.conf
         content: |
-          nameserver 192.168.100.3
+          nameserver ${var.proxmox_network_prefix}.3
           nameserver 8.8.8.8
           search homelab.local
         permissions: '0644'
@@ -59,7 +73,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
           apiVersion: kubeadm.k8s.io/v1beta3
           kind: ClusterConfiguration
           kubernetesVersion: v1.30.0
-          controlPlaneEndpoint: ${format("192.168.100.%d", var.k8s_control_plane_ip_start)}:6443
+          controlPlaneEndpoint: ${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start)}:6443
           networking:
             podSubnet: 10.45.0.0/16
         permissions: '0600'
@@ -92,16 +106,16 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
         echo "Starting hostname setup" > /tmp/cloud-init.log
         IP_ADDR=$(ip -4 addr show | grep inet | grep -v 127.0.0.1 | head -1 | awk '{print $2}' | cut -d'/' -f1)
         HOSTNAME=""
-        %{~ for i in range(var.proxmox_number_of_vm_k8s_control_plane) ~}
-        if [ "${format("192.168.100.%d", var.k8s_control_plane_ip_start + i)}" = "$IP_ADDR" ]; then
+        %{~for i in range(var.proxmox_number_of_vm_k8s_control_plane)~}
+        if [ "${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start + i)}" = "$IP_ADDR" ]; then
           HOSTNAME="${var.proxmox_vm_name_k8s_control_plane}${i}"
         fi
-        %{~ endfor ~}
-        %{~ for i in range(var.proxmox_number_of_vm_k8s_worker_node) ~}
-        if [ "${format("192.168.100.%d", var.k8s_worker_ip_start + i)}" = "$IP_ADDR" ]; then
+        %{~endfor~}
+        %{~for i in range(var.proxmox_number_of_vm_k8s_worker_node)~}
+        if [ "${format("%s.%d", var.proxmox_network_prefix, var.k8s_worker_ip_start + i)}" = "$IP_ADDR" ]; then
           HOSTNAME="${var.proxmox_vm_name_k8s_worker_node}${i}"
         fi
-        %{~ endfor ~}
+        %{~endfor~}
         if [ -n "$HOSTNAME" ]; then
           echo "Setting hostname to $HOSTNAME" >> /tmp/cloud-init.log
           hostnamectl set-hostname "$HOSTNAME"
@@ -120,7 +134,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
       # Prevent DHCP from overwriting /etc/resolv.conf
       - |
         echo "Configuring DHCP to not overwrite /etc/resolv.conf" >> /tmp/cloud-init.log
-        echo "supersede domain-name-servers 192.168.100.3, 8.8.8.8;" >> /etc/dhcp/dhclient.conf
+        echo "supersede domain-name-servers ${var.proxmox_network_prefix}.3, 8.8.8.8;" >> /etc/dhcp/dhclient.conf
         echo "supersede domain-name \"homelab.local\";" >> /etc/dhcp/dhclient.conf
       # Verify /etc/resolv.conf
       - |
@@ -163,7 +177,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
       - |
         echo "Installing containerd" >> /tmp/cloud-init.log
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "containerd key setup failed" >> /tmp/cloud-init.log; exit 1; }
-        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu jammy stable" > /etc/apt/sources.list.d/docker.list
+        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
         apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for containerd failed" >> /tmp/cloud-init.log; exit 1; }
         apt install -y containerd.io=1.7.27-1 >> /tmp/cloud-init.log 2>&1 || { echo "containerd install failed" >> /tmp/cloud-init.log; exit 1; }
         containerd config default | tee /etc/containerd/config.toml >> /tmp/cloud-init.log 2>&1
@@ -182,8 +196,8 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
       # Test DNS resolution
       - |
         echo "Testing DNS resolution" >> /tmp/cloud-init.log
-        ping -c 1 192.168.100.3 >> /tmp/cloud-init.log 2>&1 || { echo "DNS server unreachable" >> /tmp/cloud-init.log; exit 1; }
-        nslookup ns1.homelab.local 192.168.100.3 >> /tmp/cloud-init.log 2>&1 || { echo "DNS resolution failed for ns1.homelab.local" >> /tmp/cloud-init.log; }
+        ping -c 1 ${var.proxmox_network_prefix}.3 >> /tmp/cloud-init.log 2>&1 || { echo "DNS server unreachable" >> /tmp/cloud-init.log; exit 1; }
+        nslookup ns1.homelab.local ${var.proxmox_network_prefix}.3 >> /tmp/cloud-init.log 2>&1 || { echo "DNS resolution failed for ns1.homelab.local" >> /tmp/cloud-init.log; }
       # Open firewall for HTTP server (control plane only)
       - |
         if [ "${var.proxmox_vm_name_k8s_control_plane}0" = "$(hostname)" ]; then
@@ -268,9 +282,9 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
             echo "Number of expected nodes: echo $EXPECTED_NODES"
             if [ "$WORKER_NODES" -eq "$EXPECTED_NODES" ] && [ "$WORKER_NODES_STATUS" -eq "$EXPECTED_NODES" ]; then
               echo "All $EXPECTED_NODES worker nodes are ready, labeling with role=worker" >> /tmp/cloud-init.log
-              %{~ for i in range(var.proxmox_number_of_vm_k8s_worker_node) ~}
+              %{~for i in range(var.proxmox_number_of_vm_k8s_worker_node)~}
               kubectl label nodes k8s-worker-${i} node-role.kubernetes.io/worker=worker --overwrite >> /tmp/cloud-init.log 2>&1
-              %{~ endfor ~}
+              %{~endfor~}
               break
             else
               echo "Not all worker nodes are ready (Detected: $WORKER_NODES/$EXPECTED_NODES, Ready: $WORKER_NODES_STATUS/$EXPECTED_NODES)" >> /tmp/cloud-init.log
@@ -285,13 +299,13 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
         fi
       # Join additional control plane nodes
       - |
-        %{~ for i in range(1, var.proxmox_number_of_vm_k8s_control_plane) ~}
+        %{~for i in range(1, var.proxmox_number_of_vm_k8s_control_plane)~}
         if [ "${var.proxmox_vm_name_k8s_control_plane}${i}" = "$(hostname)" ]; then
           echo "Joining control plane node ${var.proxmox_vm_name_k8s_control_plane}${i}" >> /tmp/cloud-init.log
           echo "Waiting for control plane HTTP server to be ready" >> /tmp/cloud-init.log
           sleep 120
           for attempt in $(seq 1 10); do
-            JOIN_CMD=$(curl -v http://${format("192.168.100.%d", var.k8s_control_plane_ip_start)}:8000/k8s-join-token > /tmp/curl-join.log 2>&1)
+            JOIN_CMD=$(curl -v http://${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start)}:8000/k8s-join-token > /tmp/curl-join.log 2>&1)
             if [ -n "$JOIN_CMD" ]; then
               echo "Fetched join command: $JOIN_CMD" >> /tmp/cloud-init.log
               break
@@ -301,7 +315,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
           done
           if [ -z "$JOIN_CMD" ]; then
             echo "Falling back to wget for fetching join token" >> /tmp/cloud-init.log
-            JOIN_CMD=$(wget -q -O - http://${format("192.168.100.%d", var.k8s_control_plane_ip_start)}:8000/k8s-join-token 2>> /tmp/cloud-init.log)
+            JOIN_CMD=$(wget -q -O - http://${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start)}:8000/k8s-join-token 2>> /tmp/cloud-init.log)
             if [ -n "$JOIN_CMD" ]; then
               echo "Fetched join command using wget: $JOIN_CMD" >> /tmp/cloud-init.log
             else
@@ -309,7 +323,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
               exit 1
             fi
           fi
-          CERT_KEY=$(curl -v http://${format("192.168.100.%d", var.k8s_control_plane_ip_start)}:8000/k8s-cert-key > /tmp/curl-cert.log 2>&1)
+          CERT_KEY=$(curl -v http://${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start)}:8000/k8s-cert-key > /tmp/curl-cert.log 2>&1)
           if [ -z "$CERT_KEY" ]; then
             echo "Failed to fetch certificate key, see /tmp/curl-cert.log for details" >> /tmp/cloud-init.log
             exit 1
@@ -320,16 +334,16 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
             exit 1
           fi
         fi
-        %{~ endfor ~}
+        %{~endfor~}
       # Join worker nodes
       - |
-        %{~ for i in range(var.proxmox_number_of_vm_k8s_worker_node) ~}
+        %{~for i in range(var.proxmox_number_of_vm_k8s_worker_node)~}
         if [ "${var.proxmox_vm_name_k8s_worker_node}${i}" = "$(hostname)" ]; then
           echo "Joining worker node ${var.proxmox_vm_name_k8s_worker_node}${i}" >> /tmp/cloud-init.log
           echo "Waiting for control plane HTTP server to be ready" >> /tmp/cloud-init.log
           sleep 120
           for attempt in $(seq 1 10); do
-            JOIN_CMD=$(wget -q -O - http://${format("192.168.100.%d", var.k8s_control_plane_ip_start)}:8000/k8s-join-token 2>> /tmp/cloud-init.log)
+            JOIN_CMD=$(wget -q -O - http://${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start)}:8000/k8s-join-token 2>> /tmp/cloud-init.log)
             if [ -n "$JOIN_CMD" ]; then
               echo "Fetched join command: $JOIN_CMD" >> /tmp/cloud-init.log
               break
@@ -339,7 +353,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
           done
           if [ -z "$JOIN_CMD" ]; then
             echo "Falling back to curl for fetching join token" >> /tmp/cloud-init.log
-            JOIN_CMD=$(curl -v http://${format("192.168.100.%d", var.k8s_control_plane_ip_start)}:8000/k8s-join-token 2>> /tmp/curl-join.log 2>&1)
+            JOIN_CMD=$(curl -v http://${format("%s.%d", var.proxmox_network_prefix, var.k8s_control_plane_ip_start)}:8000/k8s-join-token 2>> /tmp/curl-join.log 2>&1)
 
             if [ -n "$JOIN_CMD" ]; then
               echo "Fetched join command using curl: $JOIN_CMD" >> /tmp/cloud-init.log
@@ -354,7 +368,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
             exit 1
           fi
         fi
-        %{~ endfor ~}
+        %{~endfor~}
       # Mark setup complete
       - echo "Kubernetes setup complete" > /tmp/cloud-config.done
     EOF
@@ -363,123 +377,150 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config" {
   }
 }
 
+# Cloud-init canonico (mesmo conteudo do legado, renderizado do template).
+# Usado pelas VMs novas; VMs pre-HA continuam no arquivo congelado acima.
+resource "proxmox_virtual_environment_file" "k8s_cloud_config_ha" {
+  content_type = "snippets"
+  datastore_id = var.proxmox_datastore_name
+  node_name    = var.proxmox_node_name
+
+  source_raw {
+    data = templatefile("${path.module}/templates/cloud-config.yaml.tftpl", {
+      proxmox_network_prefix                 = var.proxmox_network_prefix
+      k8s_control_plane_ip_start             = var.k8s_control_plane_ip_start
+      k8s_worker_ip_start                    = var.k8s_worker_ip_start
+      proxmox_number_of_vm_k8s_control_plane = var.proxmox_number_of_vm_k8s_control_plane
+      proxmox_number_of_vm_k8s_worker_node   = var.proxmox_number_of_vm_k8s_worker_node
+      proxmox_vm_name_k8s_control_plane      = var.proxmox_vm_name_k8s_control_plane
+      proxmox_vm_name_k8s_worker_node        = var.proxmox_vm_name_k8s_worker_node
+      proxmox_vm_user                        = var.proxmox_vm_user
+      ssh_public_key                         = trimspace(data.local_file.ssh_public_key.content)
+    })
+
+    file_name = "cloud-config-ha.yaml"
+  }
+}
+
 # Existing Kubernetes Control Plane VMs
 resource "proxmox_virtual_environment_vm" "k8s-control-plane" {
-    count      = var.proxmox_number_of_vm_k8s_control_plane
-    name       = format("%s%s", var.proxmox_vm_name_k8s_control_plane, count.index)
-    node_name  = var.proxmox_node_name
-    stop_on_destroy = true
+  count           = var.proxmox_number_of_vm_k8s_control_plane
+  name            = format("%s%s", var.proxmox_vm_name_k8s_control_plane, count.index)
+  node_name       = var.proxmox_node_name
+  stop_on_destroy = true
 
-    agent {
-      enabled = true
-    }
+  agent {
+    enabled = true
+  }
 
-    initialization {
-      user_data_file_id = proxmox_virtual_environment_file.k8s_cloud_config.id
+  initialization {
+    datastore_id = var.proxmox_datastore_name
+    # VM 0 e pre-HA e fica no arquivo congelado; novas usam o canonico.
+    user_data_file_id = count.index == 0 ? proxmox_virtual_environment_file.k8s_cloud_config.id : proxmox_virtual_environment_file.k8s_cloud_config_ha.id
 
-      ip_config {
-        ipv4 {
-          address = format("192.168.100.%d/24", count.index + var.k8s_control_plane_ip_start)
-          gateway = "192.168.100.1"
-        }
+    ip_config {
+      ipv4 {
+        address = format("%s.%d/24", var.proxmox_network_prefix, count.index + var.k8s_control_plane_ip_start)
+        gateway = "${var.proxmox_network_prefix}.1"
       }
     }
+  }
 
-    disk {
-      datastore_id = var.proxmox_datastore_name
-      file_id      = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
-      interface    = "virtio0"
-      iothread     = true
-      discard      = "on"
-      size         = 40
-    }
+  disk {
+    datastore_id = var.proxmox_datastore_name
+    file_id      = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
+    interface    = "virtio0"
+    iothread     = true
+    discard      = "on"
+    size         = 40
+  }
 
-    cpu {
-      architecture = "x86_64"
-      cores = 2
-      type = "host"
-    }
+  cpu {
+    architecture = "x86_64"
+    cores        = 2
+    type         = "host"
+  }
 
-    memory {
-      dedicated = 4096
-    }
+  memory {
+    dedicated = 4096
+  }
 
-    network_device {
-      bridge = "vmbr0"
-    }
+  network_device {
+    bridge = var.proxmox_network_bridge
+  }
 
-    depends_on = [proxmox_virtual_environment_file.k8s_cloud_config]
+  depends_on = [proxmox_virtual_environment_file.k8s_cloud_config]
 }
 
 # Existing Kubernetes Worker Nodes
 resource "proxmox_virtual_environment_vm" "k8s-worker-node" {
-    count      = var.proxmox_number_of_vm_k8s_worker_node
-    name       = format("%s%s", var.proxmox_vm_name_k8s_worker_node, count.index)
-    node_name  = var.proxmox_node_name
-    stop_on_destroy = true
+  count           = var.proxmox_number_of_vm_k8s_worker_node
+  name            = format("%s%s", var.proxmox_vm_name_k8s_worker_node, count.index)
+  node_name       = var.proxmox_node_name
+  stop_on_destroy = true
 
-    agent {
-      enabled = true
-    }
+  agent {
+    enabled = true
+  }
 
-    initialization {
-      user_data_file_id = proxmox_virtual_environment_file.k8s_cloud_config.id
+  initialization {
+    datastore_id       = var.proxmox_datastore_name
+    user_data_file_id = proxmox_virtual_environment_file.k8s_cloud_config.id
 
-      ip_config {
-        ipv4 {
-          address = format("192.168.100.%d/24", count.index + var.k8s_worker_ip_start)
-          gateway = "192.168.100.1"
-        }
+    ip_config {
+      ipv4 {
+        address = format("%s.%d/24", var.proxmox_network_prefix, count.index + var.k8s_worker_ip_start)
+        gateway = "${var.proxmox_network_prefix}.1"
       }
     }
+  }
 
-    disk {
-      datastore_id = var.proxmox_datastore_name
-      file_id      = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
-      interface    = "virtio0"
-      iothread     = true
-      discard      = "on"
-      size         = 30
-    }
+  disk {
+    datastore_id = var.proxmox_datastore_name
+    file_id      = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
+    interface    = "virtio0"
+    iothread     = true
+    discard      = "on"
+    size         = 30
+  }
 
-    disk {
-      datastore_id = var.proxmox_datastore_name
-      interface    = "virtio1"
-      iothread     = true
-      discard      = "on"
-      size         = 100
-    }
+  disk {
+    datastore_id = var.proxmox_datastore_name
+    interface    = "virtio1"
+    iothread     = true
+    discard      = "on"
+    size         = 100
+  }
 
-    cpu {
-      architecture = "x86_64"
-      cores = 4
-      type = "host"
-    }
+  cpu {
+    architecture = "x86_64"
+    cores        = 4
+    type         = "host"
+  }
 
-    memory {
-      dedicated = 6144
-    }
+  memory {
+    dedicated = 6144
+  }
 
-    network_device {
-      bridge = "vmbr0"
-    }
+  network_device {
+    bridge = var.proxmox_network_bridge
+  }
 
-    depends_on = [proxmox_virtual_environment_vm.k8s-control-plane]
+  depends_on = [proxmox_virtual_environment_vm.k8s-control-plane]
 }
 
 # Ubuntu Cloud Image
 resource "proxmox_virtual_environment_download_file" "ubuntu_cloud_image" {
-    content_type = "iso"
-    datastore_id = var.proxmox_datastore_name
-    node_name    = var.proxmox_node_name
-    upload_timeout = 2500
+  content_type   = "iso"
+  datastore_id   = var.proxmox_datastore_name
+  node_name      = var.proxmox_node_name
+  upload_timeout = 2500
 
-    url = "https://cloud-images.ubuntu.com/releases/22.04/release/ubuntu-22.04-server-cloudimg-amd64.img"
+  url = "https://cloud-images.ubuntu.com/releases/24.04/release/ubuntu-24.04-server-cloudimg-amd64.img"
 }
 
 # SSH Public Key
 data "local_file" "ssh_public_key" {
-    filename = "./id_rsa.pub"
+  filename = "./id_rsa.pub"
 }
 
 #TODO: Prepare one node to be the "IA node"
