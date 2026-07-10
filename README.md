@@ -4,6 +4,26 @@ Production-style Kubernetes on a single OVH dedicated server running Proxmox,
 fully bootstrapped by one `terraform apply`: HA control plane, ingress with a
 wildcard Let's Encrypt certificate, Rancher, metrics and a WireGuard VPN.
 
+## ✅ Current Status (2026-07-10)
+
+Everything below is **deployed and verified** on the live environment (OVH
+dedicated server, `pve01`):
+
+| Area | State |
+|---|---|
+| Cluster | kubeadm v1.30 HA — 3 control planes (etcd quorum 3), 3 workers, Calico |
+| Ingress | MetalLB VIP `10.10.10.100` + ingress-nginx, DNAT 80/443 on the host |
+| TLS | Wildcard `*.kubepriority.com.br` (Let's Encrypt DNS-01), auto-renewed, default cert |
+| DNS | Cloud DNS apex + wildcard → public IP, managed by apply |
+| Rancher | `https://rancher.kubepriority.com.br` (2.13.3, own cert via cert-manager) |
+| Storage | Longhorn 1.12 — 3×100GB, 3 replicas, SCs `longhorn` (default), `longhorn-fs`, `longhorn-block` |
+| Metrics | metrics-server (`kubectl top` working) |
+| VPN | WireGuard on the host (UDP 51820), client `erik` active; site-to-site structure ready, waiting for the on-prem peer key/CIDR |
+| Bootstrap | Single `terraform apply` rebuilds everything; component flags in tfvars |
+
+Known gaps: Kubernetes API endpoint still points at control-plane-0
+(`10.10.10.50:6443`) — kube-vip planned; see Coming Soon.
+
 ## 🛠️ Tech Stack
 
 - **Terraform**: Infra as code — VMs, DNS, DNAT, VPN and all cluster addons.

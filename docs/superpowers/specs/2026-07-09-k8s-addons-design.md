@@ -1,7 +1,9 @@
 # Design: Bootstrap de addons Kubernetes via Terraform + Helm
 
 Data: 2026-07-09
-Status: aprovado
+Status: **implementado e verificado em produção** (2026-07-10) — inclui os
+adendos abaixo (Rancher, bootstrap automatizado, VPN WireGuard, flags,
+Longhorn). Ver `## Adendo` e o status vivo no README.
 
 ## Contexto
 
