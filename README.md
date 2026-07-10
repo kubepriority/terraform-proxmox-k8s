@@ -211,6 +211,54 @@ sed -e 's|server: https://127.0.0.1:6443|server: https://10.10.10.50:6443|' \
 KUBECONFIG=./kubeconfig-vpn kubectl get nodes
 ```
 
+### 8. Storage (Longhorn)
+
+Longhorn provides replicated storage over the workers' dedicated data disks.
+Capacity and replication live in `secret.auto.tfvars`:
+
+```hcl
+worker_data_disk_size = 100 # GB per worker (grow-only; shrinking recreates the VM)
+longhorn_replicas     = 3   # copies of each volume (max = number of workers)
+```
+
+Usable pool ≈ `workers × disk ÷ replicas` (3×100 ÷ 3 ≈ 100GB). Volume **size is
+set per PVC**, not on the StorageClass. Available classes:
+
+| StorageClass | Use |
+|---|---|
+| `longhorn` (default) | PVC without a class lands here — filesystem |
+| `longhorn-fs` | Named convention for filesystem volumes |
+| `longhorn-block` | Named convention for raw block volumes |
+
+`volumeMode` is always decided by the PVC (Kubernetes default: `Filesystem`).
+A bare PVC gives you an ext4 volume with 3 replicas:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 5Gi } }
+```
+
+Raw block device (app formats/consumes the device itself):
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: raw }
+spec:
+  storageClassName: longhorn-block
+  volumeMode: Block
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 5Gi } }
+# no pod: volumeDevices: [{ name: raw, devicePath: /dev/xvda }]
+```
+
+Longhorn UI shows up inside Rancher (namespace `longhorn-system`). A volume
+survives the loss of any single worker.
+
 Any `Ingress` with a `tls` block automatically uses the wildcard certificate
 (`--default-ssl-certificate`); no need to repeat `secretName`.
 
@@ -268,7 +316,7 @@ Here’s a quick rundown of the repo’s layout:
 - `[modules/bind9_dnsserver/](modules/bind9_dnsserver/)`: Sets up the BIND9 DNS server.
 - `[modules/proxmox/](modules/proxmox/)`: Deploys the Kubernetes cluster VMs.
 - `[modules/k8s-addons/](modules/k8s-addons/)`: Installs MetalLB, ingress-nginx and cert-manager (wildcard TLS) via Helm.
-- `[charts/](charts/)`: Local helper charts (`metallb-config`, `cert-infra`) applied by the `k8s-addons` module.
+- `[charts/](charts/)`: Local helper charts (`metallb-config`, `cert-infra`, `longhorn-classes`) applied by the `k8s-addons` module.
 - `[scripts/](scripts/)`: `ensure-access.sh` (kubeconfig + API tunnel) and `update-dns.sh` (Cloud DNS upsert), both driven by `bootstrap.tf`.
 - `[bootstrap.tf](bootstrap.tf)`: glue automation — cluster access, DNAT on the Proxmox host, public DNS records.
 
@@ -299,6 +347,7 @@ flowchart TB
                 WK[Workers .60 .61 .62]
                 VIP[MetalLB VIP .100\ningress-nginx + wildcard TLS]
                 ADD[cert-manager · Rancher · metrics-server]
+                LH[Longhorn — storage replicado\n3×100GB discos dedicados]
             end
         end
     end

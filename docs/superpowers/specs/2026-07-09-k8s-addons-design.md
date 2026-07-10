@@ -139,6 +139,13 @@ Provider `helm` declarado no root (`provider.tf`) com
   `cattle-system`, 1 réplica, hostname `rancher.<domain>`). TLS próprio via
   annotation `cert-manager.io/cluster-issuer` (ingress-shim emite
   `tls-rancher-ingress`). Bootstrap password em `secret.auto.tfvars`.
+- **Longhorn 1.12.0** (2026-07-10): storage distribuído nos discos de 100GB dos
+  workers (`worker_data_disk_size` no tfvars), 3 réplicas por volume,
+  SC `longhorn` default + `longhorn-fs`/`longhorn-block` nomeadas
+  (chart local `charts/longhorn-classes`). open-iscsi/nfs-common no cloud-init.
+  VMs de CP/worker ganharam `lifecycle.ignore_changes[initialization]` após
+  incidente de quorum (template novo recriou 2 CPs juntos; recuperado com
+  etcd `--force-new-cluster`, sem perda).
 - **Bootstrap automatizado** (`bootstrap.tf`) substituiu os passos manuais:
   `cluster_access` (kubeconfig via `qm guest exec` + túnel 6443, roda todo
   apply), `proxmox_dnat` (remote-exec idempotente) e `public_dns` (upsert
