@@ -77,3 +77,8 @@ variable "proxmox_network_prefix" {
   description = "First three octets of the VM network (e.g. 10.10.10)"
   type        = string
 }
+variable "worker_data_disk_size" {
+  type        = number
+  description = "Tamanho (GB) do disco de dados dos workers (usado pelo Longhorn). Só cresce — diminuir força recriar a VM."
+  default     = 100
+}

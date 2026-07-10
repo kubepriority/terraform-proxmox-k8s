@@ -497,7 +497,7 @@ resource "proxmox_virtual_environment_vm" "k8s-worker-node" {
     interface    = "virtio1"
     iothread     = true
     discard      = "on"
-    size         = 100
+    size         = var.worker_data_disk_size
   }
 
   cpu {

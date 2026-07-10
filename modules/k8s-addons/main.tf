@@ -120,6 +120,22 @@ resource "helm_release" "longhorn" {
   ]
 }
 
+# SCs nomeadas por convencao de uso: longhorn-fs (Filesystem) e
+# longhorn-block (Block). Nota: volumeMode e sempre decidido no PVC.
+resource "helm_release" "longhorn_classes" {
+  count     = var.enable_longhorn ? 1 : 0
+  name      = "longhorn-classes"
+  chart     = "${path.module}/../../charts/longhorn-classes"
+  namespace = "longhorn-system"
+
+  set {
+    name  = "replicas"
+    value = var.longhorn_replicas
+  }
+
+  depends_on = [helm_release.longhorn]
+}
+
 moved {
   from = helm_release.rancher
   to   = helm_release.rancher[0]

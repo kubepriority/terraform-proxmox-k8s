@@ -25,6 +25,7 @@ module "proxmox" {
   proxmox_node_name                      = var.proxmox_node_name
   proxmox_network_bridge                 = var.proxmox_network_bridge
   proxmox_network_prefix                 = var.proxmox_network_prefix
+  worker_data_disk_size                  = var.worker_data_disk_size
 
 }
 
@@ -40,6 +41,7 @@ module "k8s_addons" {
   enable_rancher             = var.enable_rancher
   enable_metrics_server      = var.enable_metrics_server
   enable_longhorn            = var.enable_longhorn
+  longhorn_replicas          = var.longhorn_replicas
 
   depends_on = [module.proxmox, null_resource.cluster_access]
 }

@@ -156,3 +156,15 @@ variable "enable_longhorn" {
   description = "Instala o Longhorn (storage distribuído, block e filesystem)"
   default     = true
 }
+
+variable "longhorn_replicas" {
+  type        = number
+  description = "Réplicas por volume Longhorn (máx = nº de workers)"
+  default     = 3
+}
+
+variable "worker_data_disk_size" {
+  type        = number
+  description = "Tamanho (GB) do disco de dados dos workers (Longhorn). Só cresce."
+  default     = 100
+}
