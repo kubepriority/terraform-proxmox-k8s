@@ -173,6 +173,32 @@ the cluster, re-create it without applying:
 PUBLIC_HOST=139.99.62.36 CP_IP=10.10.10.50 SSH_PASSWORD='<root pw>' ./scripts/ensure-access.sh
 ```
 
+### 7. Optional components & VPN
+
+Components can be toggled in `secret.auto.tfvars` (all default `true`):
+
+```hcl
+enable_rancher        = true
+enable_metrics_server = true
+enable_vpn            = true
+```
+
+`enable_vpn` sets up **WireGuard on the Proxmox host** (UDP 51820) for two
+uses at once:
+
+- **Roadwarrior clients**: list names in `vpn_clients = ["erik"]`; each apply
+  generates `./vpn/<name>.conf` (gitignored — contains the private key).
+  Import it into any WireGuard client and you reach `10.10.10.0/24` directly
+  (kubectl, Proxmox UI, node SSH) with internal DNS via BIND9.
+- **Site-to-site with on-premise**: set `vpn_site_peer_public_key` and
+  `vpn_site_remote_cidr` (e.g. `192.168.0.0/24`) once the on-prem router has a
+  WireGuard peer configured with this server's public key (printed at the end
+  of the apply) and endpoint `<public-ip>:51820`, allowed IPs
+  `10.10.10.0/24, 10.20.0.0/24`.
+
+Keys live in `/etc/wireguard` on the host and are generated once; re-applies
+only resync the peer list.
+
 Any `Ingress` with a `tls` block automatically uses the wildcard certificate
 (`--default-ssl-certificate`); no need to repeat `secretName`.
 

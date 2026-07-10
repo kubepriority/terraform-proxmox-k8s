@@ -51,3 +51,15 @@ variable "rancher_bootstrap_password" {
   description = "Senha inicial do admin do Rancher"
   sensitive   = true
 }
+
+variable "enable_rancher" {
+  type        = bool
+  description = "Instala o Rancher"
+  default     = true
+}
+
+variable "enable_metrics_server" {
+  type        = bool
+  description = "Instala o metrics-server"
+  default     = true
+}

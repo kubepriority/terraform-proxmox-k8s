@@ -108,3 +108,45 @@ variable "dns_zone" {
   description = "Nome da managed zone no Cloud DNS"
   default     = "kubepriority-zone"
 }
+
+variable "enable_rancher" {
+  type        = bool
+  description = "Instala o Rancher"
+  default     = true
+}
+
+variable "enable_metrics_server" {
+  type        = bool
+  description = "Instala o metrics-server"
+  default     = true
+}
+
+variable "enable_vpn" {
+  type        = bool
+  description = "Configura WireGuard no host Proxmox (clientes + site-to-site)"
+  default     = true
+}
+
+variable "vpn_cidr" {
+  type        = string
+  description = "Rede interna da VPN WireGuard"
+  default     = "10.20.0.0/24"
+}
+
+variable "vpn_clients" {
+  type        = list(string)
+  description = "Nomes dos clientes roadwarrior (um .conf gerado por nome em ./vpn/)"
+  default     = ["erik"]
+}
+
+variable "vpn_site_peer_public_key" {
+  type        = string
+  description = "Chave pública WireGuard do roteador on-premise (vazio = sem site-to-site)"
+  default     = ""
+}
+
+variable "vpn_site_remote_cidr" {
+  type        = string
+  description = "CIDR da LAN on-premise atrás do peer site-to-site"
+  default     = ""
+}

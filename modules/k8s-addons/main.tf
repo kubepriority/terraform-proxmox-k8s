@@ -74,7 +74,13 @@ resource "helm_release" "cert_infra" {
   depends_on = [helm_release.cert_manager, helm_release.ingress_nginx]
 }
 
+moved {
+  from = helm_release.metrics_server
+  to   = helm_release.metrics_server[0]
+}
+
 resource "helm_release" "metrics_server" {
+  count      = var.enable_metrics_server ? 1 : 0
   name       = "metrics-server"
   repository = "https://kubernetes-sigs.github.io/metrics-server/"
   chart      = "metrics-server"
@@ -90,7 +96,13 @@ resource "helm_release" "metrics_server" {
   ]
 }
 
+moved {
+  from = helm_release.rancher
+  to   = helm_release.rancher[0]
+}
+
 resource "helm_release" "rancher" {
+  count            = var.enable_rancher ? 1 : 0
   name             = "rancher"
   repository       = "https://releases.rancher.com/server-charts/stable"
   chart            = "rancher"

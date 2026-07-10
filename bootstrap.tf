@@ -53,6 +53,32 @@ resource "null_resource" "proxmox_dnat" {
   }
 }
 
+# WireGuard no host Proxmox: acesso de clientes e site-to-site com on-premise.
+resource "null_resource" "wireguard" {
+  count = var.enable_vpn ? 1 : 0
+
+  triggers = {
+    public_host = local.proxmox_public_host
+    vpn_cidr    = var.vpn_cidr
+    clients     = join(",", var.vpn_clients)
+    site_peer   = var.vpn_site_peer_public_key
+    site_cidr   = var.vpn_site_remote_cidr
+  }
+
+  provisioner "local-exec" {
+    command = "${path.module}/scripts/setup-wireguard.sh"
+    environment = {
+      PUBLIC_HOST          = local.proxmox_public_host
+      SSH_PASSWORD         = var.proxmox_user_password
+      VPN_CIDR             = var.vpn_cidr
+      VPN_CLIENTS          = join(" ", var.vpn_clients)
+      INTERNAL_CIDR        = "${var.proxmox_network_prefix}.0/24"
+      SITE_PEER_PUBLIC_KEY = var.vpn_site_peer_public_key
+      SITE_REMOTE_CIDR     = var.vpn_site_remote_cidr
+    }
+  }
+}
+
 # Registros A publicos (apex + wildcard) apontando para o host Proxmox.
 resource "null_resource" "public_dns" {
   triggers = {

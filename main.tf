@@ -37,6 +37,8 @@ module "k8s_addons" {
   metallb_pool               = local.metallb_pool
   ingress_vip                = local.ingress_vip
   rancher_hostname           = "rancher.${var.domain}"
+  enable_rancher             = var.enable_rancher
+  enable_metrics_server      = var.enable_metrics_server
 
   depends_on = [module.proxmox, null_resource.cluster_access]
 }
