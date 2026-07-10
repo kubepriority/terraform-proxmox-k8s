@@ -9,7 +9,7 @@ wildcard Let's Encrypt certificate, Rancher, metrics and a WireGuard VPN.
 - **Terraform**: Infra as code — VMs, DNS, DNAT, VPN and all cluster addons.
 - **Proxmox VE**: Hypervisor; the host also acts as router, NAT and VPN gateway.
 - **Kubernetes (v1.30)**: Kubeadm HA (3 control planes / etcd quorum), Calico CNI.
-- **Helm addons**: MetalLB (L2), ingress-nginx, cert-manager (DNS-01 wildcard via Google Cloud DNS), Rancher, metrics-server.
+- **Helm addons**: MetalLB (L2), ingress-nginx, cert-manager (DNS-01 wildcard via Google Cloud DNS), Rancher, metrics-server, Longhorn (replicated block/filesystem storage on the workers' dedicated 100GB disks — default StorageClass, PVC picks `volumeMode: Filesystem` or `Block`).
 - **WireGuard**: Roadwarrior + site-to-site VPN on the Proxmox host.
 - **BIND9**: Internal DNS for `homelab.local`.
 - **Ubuntu 24.04 / containerd**: Base image and runtime.
@@ -321,7 +321,6 @@ flowchart TB
 ## 🔮 Coming Soon
 
 - **kube-vip**: floating VIP for the Kubernetes API (today the endpoint is control-plane-0's IP).
-- **Storage**: OpenEBS storage class for stateful workloads.
 - **Second Proxmox host**: vRack L2 span, MetalLB across hosts, OVH LB in front.
 - **IA Node**: dedicated node for AI workloads (maybe with Ollama).
 
