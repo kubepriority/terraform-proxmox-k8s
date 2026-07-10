@@ -110,6 +110,13 @@ resource "helm_release" "rancher" {
     value = "letsencrypt-dns01-prd"
   }
 
+  # Hardware modesto: Rancher leva mais que os 2 min default para subir;
+  # startup probe curta demais derruba o pod em loop.
+  set {
+    name  = "startupProbe.failureThreshold"
+    value = "60"
+  }
+
   set_sensitive {
     name  = "bootstrapPassword"
     value = var.rancher_bootstrap_password
