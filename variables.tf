@@ -84,3 +84,9 @@ variable "gcp_sa_key_path" {
   sensitive   = true
   default     = "./kubernetes/lets-encrypt-dns-google/cert-manager-dns01.json"
 }
+
+variable "rancher_bootstrap_password" {
+  type        = string
+  description = "Senha inicial do admin do Rancher"
+  sensitive   = true
+}

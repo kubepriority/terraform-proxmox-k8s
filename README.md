@@ -175,6 +175,11 @@ host, at the repo root, after the cluster nodes are `Ready`.
 Any `Ingress` with a `tls` block automatically uses the wildcard certificate
 (`--default-ssl-certificate`); no need to repeat `secretName`.
 
+The module also installs **Rancher** at `https://rancher.kubepriority.com.br`
+(chart 2.13.3, 1 replica). Initial admin login uses the bootstrap password set
+in `secret.auto.tfvars` (`rancher_bootstrap_password`); its TLS certificate is
+issued automatically by cert-manager via the ingress annotation.
+
 ## 🐛 Debugging Tips
 
 If something goes wonky, don’t panic! Here’s how to troubleshoot:

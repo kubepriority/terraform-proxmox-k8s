@@ -33,3 +33,21 @@ variable "domain" {
   description = "Domínio base do certificado wildcard"
   default     = "kubepriority.com.br"
 }
+
+variable "rancher_hostname" {
+  type        = string
+  description = "Hostname público do Rancher"
+  default     = "rancher.kubepriority.com.br"
+}
+
+variable "rancher_replicas" {
+  type        = string
+  description = "Número de réplicas do Rancher"
+  default     = "1"
+}
+
+variable "rancher_bootstrap_password" {
+  type        = string
+  description = "Senha inicial do admin do Rancher"
+  sensitive   = true
+}

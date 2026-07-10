@@ -73,3 +73,47 @@ resource "helm_release" "cert_infra" {
 
   depends_on = [helm_release.cert_manager, helm_release.ingress_nginx]
 }
+
+resource "helm_release" "rancher" {
+  name             = "rancher"
+  repository       = "https://releases.rancher.com/server-charts/stable"
+  chart            = "rancher"
+  version          = "2.13.3"
+  namespace        = "cattle-system"
+  create_namespace = true
+  timeout          = 600
+
+  set {
+    name  = "hostname"
+    value = var.rancher_hostname
+  }
+
+  set {
+    name  = "replicas"
+    value = var.rancher_replicas
+  }
+
+  set {
+    name  = "ingress.ingressClassName"
+    value = "nginx"
+  }
+
+  # cert-manager (ingress-shim) emite o certificado do Rancher automaticamente
+  # a partir desta annotation; o chart referencia o secret tls-rancher-ingress.
+  set {
+    name  = "ingress.tls.source"
+    value = "secret"
+  }
+
+  set {
+    name  = "ingress.extraAnnotations.cert-manager\\.io/cluster-issuer"
+    value = "letsencrypt-dns01-prd"
+  }
+
+  set_sensitive {
+    name  = "bootstrapPassword"
+    value = var.rancher_bootstrap_password
+  }
+
+  depends_on = [helm_release.cert_infra, helm_release.ingress_nginx]
+}

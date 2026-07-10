@@ -29,8 +29,9 @@ module "proxmox" {
 }
 
 module "k8s_addons" {
-  source          = "./modules/k8s-addons"
-  gcp_sa_key_path = var.gcp_sa_key_path
+  source                     = "./modules/k8s-addons"
+  gcp_sa_key_path            = var.gcp_sa_key_path
+  rancher_bootstrap_password = var.rancher_bootstrap_password
 
   depends_on = [module.proxmox]
 }
