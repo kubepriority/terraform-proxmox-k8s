@@ -132,3 +132,17 @@ Provider `helm` declarado no root (`provider.tf`) com
 - Observabilidade (metrics-server, Prometheus, Grafana) — removida.
 - Storage class (OpenEBS) — etapa futura.
 - Automação do DNAT e do DNS público — passos manuais documentados.
+
+## Adendo (mesmo dia, pós-implementação)
+
+- **Rancher 2.13.3** adicionado ao módulo (`helm_release.rancher`, ns
+  `cattle-system`, 1 réplica, hostname `rancher.<domain>`). TLS próprio via
+  annotation `cert-manager.io/cluster-issuer` (ingress-shim emite
+  `tls-rancher-ingress`). Bootstrap password em `secret.auto.tfvars`.
+- **Bootstrap automatizado** (`bootstrap.tf`) substituiu os passos manuais:
+  `cluster_access` (kubeconfig via `qm guest exec` + túnel 6443, roda todo
+  apply), `proxmox_dnat` (remote-exec idempotente) e `public_dns` (upsert
+  gcloud). IPs derivados de `proxmox_endpoint`/`proxmox_network_prefix`;
+  ambiente novo = copiar `secret.auto.tfvars` + key.json e rodar um único
+  `terraform apply`. Scripts `get-kubeconfig.sh`/`proxmox-dnat.sh` removidos
+  em favor de `ensure-access.sh`/`update-dns.sh`.
