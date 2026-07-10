@@ -1,3 +1,7 @@
+locals {
+  reverse_zone_name = "${join(".", reverse(split(".", var.proxmox_network_prefix)))}.in-addr.arpa"
+}
+
 # DNS Server Cloud-Init Configuration
 resource "proxmox_virtual_environment_file" "dns_cloud_config" {
   content_type = "snippets"
@@ -8,6 +12,12 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
     data = <<-EOF
     #cloud-config
     hostname: bind9-dns-server
+    bootcmd:
+      # /etc/resolv.conf is a symlink into tmpfs (/run) managed by systemd-resolved;
+      # once resolved is disabled the target vanishes on reboot, leaving the VM
+      # without DNS. Replace it with a real file on every boot.
+      - rm -f /etc/resolv.conf
+      - printf 'nameserver 127.0.0.1\nnameserver 8.8.8.8\nsearch homelab.local\n' > /etc/resolv.conf
     users:
       - default
       - name: ${var.proxmox_vm_user}
@@ -21,7 +31,7 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
       - path: /etc/hosts
         content: |
           127.0.0.1 localhost
-          192.168.100.3 bind9-dns-server bind9-dns-server.homelab.local homelab.local
+          ${var.proxmox_network_prefix}.3 bind9-dns-server bind9-dns-server.homelab.local homelab.local
         permissions: '0644'
       - path: /tmp/named.conf.options
         content: |
@@ -41,9 +51,9 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
               file "/etc/bind/db.homelab.local";
               allow-update { none; };
           };
-          zone "100.168.192.in-addr.arpa" IN {
+          zone "${local.reverse_zone_name}" IN {
               type master;
-              file "/etc/bind/db.192.168.100";
+              file "/etc/bind/db.${var.proxmox_network_prefix}";
               allow-update { none; };
           };
         permissions: '0644'
@@ -58,11 +68,11 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
                     86400      ; Minimum TTL
           )
           @       IN  NS   ns1.homelab.local.
-          ns1     IN  A    192.168.100.3
-          dns     IN  A    192.168.100.3
-          bind9-dns-server IN A 192.168.100.3
+          ns1     IN  A    ${var.proxmox_network_prefix}.3
+          dns     IN  A    ${var.proxmox_network_prefix}.3
+          bind9-dns-server IN A ${var.proxmox_network_prefix}.3
         permissions: '0644'
-      - path: /tmp/db.192.168.100
+      - path: /tmp/db.${var.proxmox_network_prefix}
         content: |
           $TTL 86400
           @   IN  SOA  ns1.homelab.local. admin.homelab.local. (
@@ -91,11 +101,11 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
       - mv /tmp/named.conf.options /etc/bind/named.conf.options >> /tmp/dns-config.log 2>&1
       - mv /tmp/named.conf.local /etc/bind/named.conf.local >> /tmp/dns-config.log 2>&1
       - mv /tmp/db.homelab.local /etc/bind/db.homelab.local >> /tmp/dns-config.log 2>&1
-      - mv /tmp/db.192.168.100 /etc/bind/db.192.168.100 >> /tmp/dns-config.log 2>&1
+      - mv /tmp/db.${var.proxmox_network_prefix} /etc/bind/db.${var.proxmox_network_prefix} >> /tmp/dns-config.log 2>&1
       - chown bind:bind /etc/bind /etc/bind/* >> /tmp/dns-config.log 2>&1
       - named-checkconf /etc/bind/named.conf.local >> /tmp/dns-config.log 2>&1 || { echo "named.conf.local check failed" >> /tmp/dns-config.log; exit 1; }
       - named-checkzone homelab.local /etc/bind/db.homelab.local >> /tmp/dns-config.log 2>&1 || { echo "homelab.local zone check failed" >> /tmp/dns-config.log; exit 1; }
-      - named-checkzone 100.168.192.in-addr.arpa /etc/bind/db.192.168.100 >> /tmp/dns-config.log 2>&1 || { echo "reverse zone check failed" >> /tmp/dns-config.log; exit 1; }
+      - named-checkzone ${local.reverse_zone_name} /etc/bind/db.${var.proxmox_network_prefix} >> /tmp/dns-config.log 2>&1 || { echo "reverse zone check failed" >> /tmp/dns-config.log; exit 1; }
       - systemctl enable named >> /tmp/dns-config.log 2>&1
       - systemctl restart named >> /tmp/dns-config.log 2>&1 || { echo "named start failed" >> /tmp/dns-config.log; exit 1; }
       - sleep 5
@@ -115,8 +125,8 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
 
 # DNS Server VM
 resource "proxmox_virtual_environment_vm" "bind9-dns-server" {
-  name        = "bind9-dns-server"
-  node_name   = var.proxmox_node_name
+  name            = "bind9-dns-server"
+  node_name       = var.proxmox_node_name
   stop_on_destroy = true
 
   agent {
@@ -124,12 +134,13 @@ resource "proxmox_virtual_environment_vm" "bind9-dns-server" {
   }
 
   initialization {
+    datastore_id       = var.proxmox_datastore_name
     user_data_file_id = proxmox_virtual_environment_file.dns_cloud_config.id
 
     ip_config {
       ipv4 {
-        address = "192.168.100.3/24"
-        gateway = "192.168.100.1"
+        address = "${var.proxmox_network_prefix}.3/24"
+        gateway = "${var.proxmox_network_prefix}.1"
       }
     }
   }
@@ -145,8 +156,8 @@ resource "proxmox_virtual_environment_vm" "bind9-dns-server" {
 
   cpu {
     architecture = "x86_64"
-    cores = 1
-    type = "host"
+    cores        = 1
+    type         = "host"
   }
 
   memory {
@@ -154,7 +165,7 @@ resource "proxmox_virtual_environment_vm" "bind9-dns-server" {
   }
 
   network_device {
-    bridge = "vmbr0"
+    bridge = var.proxmox_network_bridge
   }
 
   depends_on = [proxmox_virtual_environment_file.dns_cloud_config]
@@ -162,5 +173,5 @@ resource "proxmox_virtual_environment_vm" "bind9-dns-server" {
 
 # SSH Public Key
 data "local_file" "ssh_public_key" {
-    filename = "./id_rsa.pub"
+  filename = "./id_rsa.pub"
 }

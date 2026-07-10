@@ -74,6 +74,22 @@ resource "helm_release" "cert_infra" {
   depends_on = [helm_release.cert_manager, helm_release.ingress_nginx]
 }
 
+resource "helm_release" "metrics_server" {
+  name       = "metrics-server"
+  repository = "https://kubernetes-sigs.github.io/metrics-server/"
+  chart      = "metrics-server"
+  version    = "3.12.2"
+  namespace  = "kube-system"
+
+  # kubeadm: kubelet serve com cert self-signed; sem isso o metrics-server
+  # sobe mas nenhuma metrica e coletada (erro de TLS).
+  values = [
+    yamlencode({
+      args = ["--kubelet-insecure-tls"]
+    })
+  ]
+}
+
 resource "helm_release" "rancher" {
   name             = "rancher"
   repository       = "https://releases.rancher.com/server-charts/stable"
