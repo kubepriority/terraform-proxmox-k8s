@@ -90,3 +90,21 @@ variable "rancher_bootstrap_password" {
   description = "Senha inicial do admin do Rancher"
   sensitive   = true
 }
+
+variable "domain" {
+  type        = string
+  description = "Domínio base público (wildcard TLS e registros DNS)"
+  default     = "kubepriority.com.br"
+}
+
+variable "gcp_project" {
+  type        = string
+  description = "Projeto GCP dono da zona Cloud DNS"
+  default     = "project-90293a0a-5d49-4604-a23"
+}
+
+variable "dns_zone" {
+  type        = string
+  description = "Nome da managed zone no Cloud DNS"
+  default     = "kubepriority-zone"
+}

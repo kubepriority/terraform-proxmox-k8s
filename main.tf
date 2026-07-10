@@ -32,6 +32,11 @@ module "k8s_addons" {
   source                     = "./modules/k8s-addons"
   gcp_sa_key_path            = var.gcp_sa_key_path
   rancher_bootstrap_password = var.rancher_bootstrap_password
+  domain                     = var.domain
+  gcp_project                = var.gcp_project
+  metallb_pool               = local.metallb_pool
+  ingress_vip                = local.ingress_vip
+  rancher_hostname           = "rancher.${var.domain}"
 
-  depends_on = [module.proxmox]
+  depends_on = [module.proxmox, null_resource.cluster_access]
 }

@@ -131,46 +131,47 @@ kubectl get nodes
 
 You should see your control plane and worker nodes in `Ready` state. The kubeconfig is already set up at `/home/ubuntu/.kube/config` on the first control plane node.
 
-### 6. Deploy Kubernetes Addons (MetalLB, ingress-nginx, cert-manager)
+### 6. Kubernetes Addons (MetalLB, ingress-nginx, cert-manager, Rancher)
 
-The `k8s-addons` module installs MetalLB, ingress-nginx and cert-manager with a
-wildcard Let's Encrypt certificate (`*.kubepriority.com.br`) issued via DNS-01
-on Google Cloud DNS. Run these steps from a machine with SSH access to the OVH
-host, at the repo root, after the cluster nodes are `Ready`.
+Fully automated: the same `terraform apply` that creates the VMs also
+bootstraps the addons. `bootstrap.tf` handles the glue steps that used to be
+manual:
 
-1. Fetch the kubeconfig and open the tunnel to the cluster API:
+- `null_resource.cluster_access` — fetches the kubeconfig from the control
+  plane via `qm guest exec` (no SSH key needed inside the VMs) and keeps an
+  SSH tunnel to the cluster API on `127.0.0.1:6443`. Runs on every apply.
+- `null_resource.proxmox_dnat` — DNATs ports 80/443 on the Proxmox host to
+  the MetalLB VIP (`<network_prefix>.100`) and persists the rules.
+- `null_resource.public_dns` — upserts the public `A` records (apex +
+  wildcard) in Google Cloud DNS pointing to the Proxmox host.
 
-   ```bash
-   ./scripts/get-kubeconfig.sh
-   ssh -fN -L 6443:10.10.10.50:6443 root@139.99.62.36
-   ```
+All IPs are derived from `proxmox_endpoint` and `proxmox_network_prefix` —
+point them at a new Proxmox host and everything follows.
 
-2. Apply (the GCP service account key must exist at
-   `kubernetes/lets-encrypt-dns-google/cert-manager-dns01.json` — it is
-   gitignored and never committed):
+**Prerequisites on the machine running Terraform:** `sshpass`, `jq`, `gcloud`,
+plus two gitignored files: `secret.auto.tfvars` (credentials) and the GCP
+service account key at
+`kubernetes/lets-encrypt-dns-google/cert-manager-dns01.json`.
 
-   ```bash
-   terraform init
-   terraform apply
-   ```
+```bash
+terraform init
+terraform apply
+```
 
-3. On the Proxmox host (as root), forward ports 80/443 to the ingress VIP:
+Validate the wildcard certificate (DNS-01 issuance takes a few minutes):
 
-   ```bash
-   ./scripts/proxmox-dnat.sh
-   ```
+```bash
+KUBECONFIG=./kubeconfig kubectl -n ingress-nginx get certificate
+# wait for READY=True, then:
+curl -v https://anything.kubepriority.com.br
+```
 
-4. Public DNS (Google Cloud DNS, zone `kubepriority.com.br`): create `A`
-   records for `kubepriority.com.br` and `*.kubepriority.com.br` pointing to
-   `139.99.62.36`.
+If the SSH tunnel drops (e.g. after a reboot) and `terraform plan` can't reach
+the cluster, re-create it without applying:
 
-5. Validate the wildcard certificate (DNS-01 issuance takes a few minutes):
-
-   ```bash
-   KUBECONFIG=./kubeconfig kubectl -n ingress-nginx get certificate
-   # wait for READY=True, then:
-   curl -v https://anything.kubepriority.com.br
-   ```
+```bash
+PUBLIC_HOST=139.99.62.36 CP_IP=10.10.10.50 SSH_PASSWORD='<root pw>' ./scripts/ensure-access.sh
+```
 
 Any `Ingress` with a `tls` block automatically uses the wildcard certificate
 (`--default-ssl-certificate`); no need to repeat `secretName`.
@@ -229,7 +230,8 @@ Here’s a quick rundown of the repo’s layout:
 - `[modules/proxmox/](modules/proxmox/)`: Deploys the Kubernetes cluster VMs.
 - `[modules/k8s-addons/](modules/k8s-addons/)`: Installs MetalLB, ingress-nginx and cert-manager (wildcard TLS) via Helm.
 - `[charts/](charts/)`: Local helper charts (`metallb-config`, `cert-infra`) applied by the `k8s-addons` module.
-- `[scripts/](scripts/)`: `get-kubeconfig.sh` (fetch kubeconfig via SSH jump) and `proxmox-dnat.sh` (forward 80/443 to the ingress VIP).
+- `[scripts/](scripts/)`: `ensure-access.sh` (kubeconfig + API tunnel) and `update-dns.sh` (Cloud DNS upsert), both driven by `bootstrap.tf`.
+- `[bootstrap.tf](bootstrap.tf)`: glue automation — cluster access, DNAT on the Proxmox host, public DNS records.
 
 The `[.gitignore](.gitignore)` ensures sensitive files like `secret.auto.tfvars` and Terraform state aren’t versioned. Keep it that way for security! 🔒
 
