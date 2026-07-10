@@ -47,7 +47,8 @@ resource "null_resource" "proxmox_dnat" {
       "sysctl -w net.ipv4.ip_forward=1 >/dev/null",
       "for P in 80 443; do iptables -t nat -C PREROUTING -d ${local.proxmox_public_host} -p tcp --dport $P -j DNAT --to-destination ${local.ingress_vip}:$P 2>/dev/null || iptables -t nat -A PREROUTING -d ${local.proxmox_public_host} -p tcp --dport $P -j DNAT --to-destination ${local.ingress_vip}:$P; done",
       "for P in 80 443; do iptables -C FORWARD -d ${local.ingress_vip} -p tcp --dport $P -j ACCEPT 2>/dev/null || iptables -A FORWARD -d ${local.ingress_vip} -p tcp --dport $P -j ACCEPT; done",
-      "command -v netfilter-persistent >/dev/null && netfilter-persistent save || echo 'AVISO: instale iptables-persistent para persistir as regras'",
+      "command -v netfilter-persistent >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent",
+      "netfilter-persistent save",
     ]
   }
 }
