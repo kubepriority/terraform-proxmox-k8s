@@ -150,3 +150,9 @@ variable "vpn_site_remote_cidr" {
   description = "CIDR da LAN on-premise atrás do peer site-to-site"
   default     = ""
 }
+
+variable "enable_longhorn" {
+  type        = bool
+  description = "Instala o Longhorn (storage distribuído, block e filesystem)"
+  default     = true
+}

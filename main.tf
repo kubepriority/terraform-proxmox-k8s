@@ -39,6 +39,7 @@ module "k8s_addons" {
   rancher_hostname           = "rancher.${var.domain}"
   enable_rancher             = var.enable_rancher
   enable_metrics_server      = var.enable_metrics_server
+  enable_longhorn            = var.enable_longhorn
 
   depends_on = [module.proxmox, null_resource.cluster_access]
 }

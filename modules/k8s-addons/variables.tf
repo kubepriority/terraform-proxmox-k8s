@@ -63,3 +63,15 @@ variable "enable_metrics_server" {
   description = "Instala o metrics-server"
   default     = true
 }
+
+variable "enable_longhorn" {
+  type        = bool
+  description = "Instala o Longhorn (storage distribuído, block e filesystem)"
+  default     = true
+}
+
+variable "longhorn_replicas" {
+  type        = number
+  description = "Réplicas por volume Longhorn (máx = nº de workers)"
+  default     = 3
+}

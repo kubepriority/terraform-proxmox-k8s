@@ -448,6 +448,15 @@ resource "proxmox_virtual_environment_vm" "k8s-control-plane" {
     bridge = var.proxmox_network_bridge
   }
 
+  # Mudanca no template cloud-init NAO pode recriar control planes vivos:
+  # destruir 2 CPs juntos derruba o quorum do etcd. VM nova (count maior)
+  # nasce com o template atual; VM existente ignora o novo user_data.
+  # Recriar de proposito: -replace=... UM POR VEZ, removendo antes o no
+  # (kubectl delete node) para o etcd nao ficar com membro morto.
+  lifecycle {
+    ignore_changes = [initialization]
+  }
+
   depends_on = [proxmox_virtual_environment_file.k8s_cloud_config]
 }
 
@@ -463,7 +472,7 @@ resource "proxmox_virtual_environment_vm" "k8s-worker-node" {
   }
 
   initialization {
-    datastore_id       = var.proxmox_datastore_name
+    datastore_id      = var.proxmox_datastore_name
     user_data_file_id = proxmox_virtual_environment_file.k8s_cloud_config.id
 
     ip_config {
@@ -503,6 +512,13 @@ resource "proxmox_virtual_environment_vm" "k8s-worker-node" {
 
   network_device {
     bridge = var.proxmox_network_bridge
+  }
+
+  # Mesma protecao dos control planes: recriar workers em massa destroi as
+  # replicas do Longhorn. Recriar de proposito: -replace UM POR VEZ com
+  # drain + delete node antes.
+  lifecycle {
+    ignore_changes = [initialization]
   }
 
   depends_on = [proxmox_virtual_environment_vm.k8s-control-plane]

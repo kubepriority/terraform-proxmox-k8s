@@ -176,6 +176,9 @@ runcmd:
     apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for Kubernetes failed" >> /tmp/cloud-init.log; exit 1; }
     apt install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.0-1.1 >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes install failed" >> /tmp/cloud-init.log; exit 1; }
     apt-mark hold kubelet kubeadm kubectl >> /tmp/cloud-init.log 2>&1
+    # Longhorn: iscsi para attach de volumes, nfs para RWX
+    apt install -y open-iscsi nfs-common >> /tmp/cloud-init.log 2>&1
+    systemctl enable --now iscsid >> /tmp/cloud-init.log 2>&1
     systemctl enable --now kubelet >> /tmp/cloud-init.log 2>&1
   # Test DNS resolution
   - |

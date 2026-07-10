@@ -96,6 +96,30 @@ resource "helm_release" "metrics_server" {
   ]
 }
 
+resource "helm_release" "longhorn" {
+  count            = var.enable_longhorn ? 1 : 0
+  name             = "longhorn"
+  repository       = "https://charts.longhorn.io"
+  chart            = "longhorn"
+  version          = "1.12.0"
+  namespace        = "longhorn-system"
+  create_namespace = true
+  timeout          = 600
+
+  values = [
+    yamlencode({
+      defaultSettings = {
+        # Disco dedicado de 100GB montado pelo cloud-init em todos os nos
+        defaultDataPath = "/var/openebs/local"
+      }
+      persistence = {
+        defaultClass             = true
+        defaultClassReplicaCount = var.longhorn_replicas
+      }
+    })
+  ]
+}
+
 moved {
   from = helm_release.rancher
   to   = helm_release.rancher[0]
