@@ -68,9 +68,21 @@ variable "proxmox_network_prefix" {
 }
 
 variable "proxmox_datastore_name" {
-  description = "Proxmox datastore"
+  description = "Proxmox datastore para snippets e imagens (precisa aceitar iso/snippets)"
   type        = string
   default     = "local"
+}
+
+variable "proxmox_vm_datastore_name" {
+  description = "Datastore dos discos das VMs (pool ZFS 'data')"
+  type        = string
+  default     = "data"
+}
+
+variable "longhorn_datastore_name" {
+  description = "Datastore do disco de dados dos workers para o Longhorn (pool ZFS 'storage')"
+  type        = string
+  default     = "storage"
 }
 variable "kubeconfig_path" {
   type        = string
@@ -121,6 +133,18 @@ variable "enable_metrics_server" {
   default     = true
 }
 
+variable "enable_argocd" {
+  type        = bool
+  description = "Instala o Argo CD (GitOps)"
+  default     = true
+}
+
+variable "enable_passbolt" {
+  type        = bool
+  description = "Instala o Passbolt (gerenciador de senhas)"
+  default     = true
+}
+
 variable "enable_vpn" {
   type        = bool
   description = "Configura WireGuard no host Proxmox (clientes + site-to-site)"
@@ -167,4 +191,10 @@ variable "worker_data_disk_size" {
   type        = number
   description = "Tamanho (GB) do disco de dados dos workers (Longhorn). Só cresce."
   default     = 100
+}
+
+variable "tunnel_local_port" {
+  type        = string
+  description = "Porta local do túnel SSH para a API do cluster (16443+; um por servidor)"
+  default     = "16443"
 }

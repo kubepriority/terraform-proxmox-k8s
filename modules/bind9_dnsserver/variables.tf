@@ -25,8 +25,14 @@ variable "proxmox_node_name" {
 }
 
 variable "proxmox_datastore_name" {
-  description = "Virtual machines datastore"
+  description = "Datastore para snippets (precisa aceitar snippets)"
   type        = string
+}
+
+variable "proxmox_vm_datastore_name" {
+  description = "Datastore dos discos das VMs"
+  type        = string
+  default     = "data"
 }
 
 variable "vm_image_id" {

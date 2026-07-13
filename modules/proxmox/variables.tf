@@ -63,9 +63,21 @@ variable "k8s_worker_ip_start" {
 }
 
 variable "proxmox_datastore_name" {
-  description = "Promox datastore"
+  description = "Promox datastore para snippets e imagens (precisa aceitar iso/snippets)"
   type        = string
   default     = "local"
+}
+
+variable "proxmox_vm_datastore_name" {
+  description = "Datastore dos discos das VMs"
+  type        = string
+  default     = "data"
+}
+
+variable "longhorn_datastore_name" {
+  description = "Datastore do disco de dados dos workers (Longhorn)"
+  type        = string
+  default     = "storage"
 }
 
 variable "proxmox_network_bridge" {
@@ -81,4 +93,9 @@ variable "worker_data_disk_size" {
   type        = number
   description = "Tamanho (GB) do disco de dados dos workers (usado pelo Longhorn). Só cresce — diminuir força recriar a VM."
   default     = 100
+}
+
+variable "vm_image_id" {
+  description = "Ubuntu cloud image id (recurso criado no root)"
+  type        = string
 }

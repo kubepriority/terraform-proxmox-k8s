@@ -160,7 +160,7 @@ runcmd:
   # Install containerd
   - |
     echo "Installing containerd" >> /tmp/cloud-init.log
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "containerd key setup failed" >> /tmp/cloud-init.log; exit 1; }
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "containerd key setup failed" >> /tmp/cloud-init.log; exit 1; }
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
     apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for containerd failed" >> /tmp/cloud-init.log; exit 1; }
     apt install -y containerd.io=1.7.27-1 >> /tmp/cloud-init.log 2>&1 || { echo "containerd install failed" >> /tmp/cloud-init.log; exit 1; }
@@ -171,7 +171,7 @@ runcmd:
   # Install Kubernetes components
   - |
     echo "Installing Kubernetes components" >> /tmp/cloud-init.log
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor -o /usr/share/keyrings/kubernetes-apt-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes key setup failed" >> /tmp/cloud-init.log; exit 1; }
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor --yes -o /usr/share/keyrings/kubernetes-apt-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes key setup failed" >> /tmp/cloud-init.log; exit 1; }
     echo "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
     apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for Kubernetes failed" >> /tmp/cloud-init.log; exit 1; }
     apt install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.0-1.1 >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes install failed" >> /tmp/cloud-init.log; exit 1; }
@@ -183,6 +183,8 @@ runcmd:
   # Test DNS resolution
   - |
     echo "Testing DNS resolution" >> /tmp/cloud-init.log
+    # bind9 sobe em paralelo e demora mais (instala pacotes); espera ate 5 min
+    for i in $(seq 1 60); do ping -c 1 ${proxmox_network_prefix}.3 >/dev/null 2>&1 && break; sleep 5; done
     ping -c 1 ${proxmox_network_prefix}.3 >> /tmp/cloud-init.log 2>&1 || { echo "DNS server unreachable" >> /tmp/cloud-init.log; exit 1; }
     nslookup ns1.homelab.local ${proxmox_network_prefix}.3 >> /tmp/cloud-init.log 2>&1 || { echo "DNS resolution failed for ns1.homelab.local" >> /tmp/cloud-init.log; }
   # Open firewall for HTTP server (control plane only)

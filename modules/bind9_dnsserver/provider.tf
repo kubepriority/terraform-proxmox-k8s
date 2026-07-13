@@ -6,10 +6,3 @@ terraform {
     }
   }
 }
-
-provider "proxmox" {
-  endpoint = var.proxmox_endpoint
-  password = var.proxmox_user_password
-  username = var.proxmox_user_name
-  insecure = true
-}

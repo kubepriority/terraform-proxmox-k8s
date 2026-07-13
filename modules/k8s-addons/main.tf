@@ -192,3 +192,94 @@ resource "helm_release" "rancher" {
 
   depends_on = [helm_release.cert_infra, helm_release.ingress_nginx]
 }
+
+resource "helm_release" "argocd" {
+  count            = var.enable_argocd ? 1 : 0
+  name             = "argocd"
+  repository       = "https://argoproj.github.io/argo-helm"
+  chart            = "argo-cd"
+  version          = "7.8.2"
+  namespace        = "argocd"
+  create_namespace = true
+  timeout          = 600
+
+  set {
+    name  = "global.domain"
+    value = var.argocd_hostname
+  }
+
+  set {
+    name  = "server.ingress.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "server.ingress.ingressClassName"
+    value = "nginx"
+  }
+
+  # cert-manager (ingress-shim) emite o certificado a partir desta annotation.
+  set {
+    name  = "server.ingress.annotations.cert-manager\\.io/cluster-issuer"
+    value = "letsencrypt-dns01-prd"
+  }
+
+  set {
+    name  = "server.ingress.tls"
+    value = "true"
+  }
+
+  # TLS termina no ingress-nginx; sem isso o argocd-server responde HTTPS
+  # proprio e o ingress entra em loop de redirect.
+  set {
+    name  = "configs.params.server\\.insecure"
+    value = "true"
+  }
+
+  depends_on = [helm_release.cert_infra, helm_release.ingress_nginx]
+}
+
+# Passwords do mariadb/redis ficam nos defaults do chart (geradas no cluster);
+# ingress com TLS do cert-manager e backend HTTPS (passbolt força SSL interno).
+resource "helm_release" "passbolt" {
+  count            = var.enable_passbolt ? 1 : 0
+  name             = "passbolt"
+  repository       = "https://download.passbolt.com/charts/passbolt"
+  chart            = "passbolt"
+  version          = "2.1.1"
+  namespace        = "passbolt"
+  create_namespace = true
+  timeout          = 900
+
+  values = [yamlencode({
+    passboltEnv = {
+      plain = {
+        APP_FULL_BASE_URL  = "https://${var.passbolt_hostname}"
+        PASSBOLT_SSL_FORCE = true
+      }
+    }
+    ingress = {
+      enabled   = true
+      className = "nginx"
+      annotations = {
+        "cert-manager.io/cluster-issuer"                = "letsencrypt-dns01-prd"
+        "nginx.ingress.kubernetes.io/backend-protocol"  = "HTTPS"
+      }
+      hosts = [{
+        host = var.passbolt_hostname
+        paths = [{
+          path     = "/"
+          port     = "https"
+          pathType = "ImplementationSpecific"
+        }]
+      }]
+      tls = [{
+        autogenerate   = false
+        existingSecret = "passbolt-tls"
+        hosts          = [var.passbolt_hostname]
+      }]
+    }
+  })]
+
+  depends_on = [helm_release.cert_infra, helm_release.ingress_nginx, helm_release.longhorn_classes]
+}

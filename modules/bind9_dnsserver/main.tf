@@ -94,6 +94,11 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
         permissions: '0644'
     runcmd:
       - echo "Starting DNS server setup" > /tmp/dns-config.log
+      # Impede o apt de auto-iniciar o qemu-guest-agent: o agent so pode subir
+      # no fim do setup, pois o terraform usa ele como gate de "DNS pronto"
+      # (as VMs k8s tem depends_on no modulo bind9).
+      - printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+      - chmod +x /usr/sbin/policy-rc.d
       - systemctl disable systemd-resolved >> /tmp/dns-config.log 2>&1
       - systemctl stop systemd-resolved >> /tmp/dns-config.log 2>&1
       - apt update >> /tmp/dns-config.log 2>&1 || { echo "apt update failed" >> /tmp/dns-config.log; exit 1; }
@@ -110,6 +115,7 @@ resource "proxmox_virtual_environment_file" "dns_cloud_config" {
       - systemctl restart named >> /tmp/dns-config.log 2>&1 || { echo "named start failed" >> /tmp/dns-config.log; exit 1; }
       - sleep 5
       - systemctl status named >> /tmp/dns-config.log 2>&1 || { echo "named service not running" >> /tmp/dns-config.log; exit 1; }
+      - rm -f /usr/sbin/policy-rc.d
       - systemctl enable qemu-guest-agent >> /tmp/dns-config.log 2>&1
       - systemctl start qemu-guest-agent >> /tmp/dns-config.log 2>&1
       - timedatectl set-timezone America/Toronto >> /tmp/dns-config.log 2>&1
@@ -134,7 +140,7 @@ resource "proxmox_virtual_environment_vm" "bind9-dns-server" {
   }
 
   initialization {
-    datastore_id       = var.proxmox_datastore_name
+    datastore_id       = var.proxmox_vm_datastore_name
     user_data_file_id = proxmox_virtual_environment_file.dns_cloud_config.id
 
     ip_config {
@@ -146,7 +152,8 @@ resource "proxmox_virtual_environment_vm" "bind9-dns-server" {
   }
 
   disk {
-    datastore_id = var.proxmox_datastore_name
+    datastore_id = var.proxmox_vm_datastore_name
+    file_format  = "raw"
     file_id      = var.vm_image_id
     interface    = "virtio0"
     iothread     = true

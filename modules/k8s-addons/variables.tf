@@ -75,3 +75,27 @@ variable "longhorn_replicas" {
   description = "Réplicas por volume Longhorn (máx = nº de workers)"
   default     = 3
 }
+
+variable "enable_argocd" {
+  type        = bool
+  description = "Instala o Argo CD (GitOps)"
+  default     = true
+}
+
+variable "argocd_hostname" {
+  type        = string
+  description = "Hostname público do Argo CD"
+  default     = "argocd.kubepriority.com.br"
+}
+
+variable "enable_passbolt" {
+  type        = bool
+  description = "Instala o Passbolt (gerenciador de senhas)"
+  default     = true
+}
+
+variable "passbolt_hostname" {
+  type        = string
+  description = "Hostname público do Passbolt"
+  default     = "passbolt.kubepriority.com.br"
+}

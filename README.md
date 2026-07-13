@@ -44,6 +44,15 @@ Before you kick things off, make sure you’ve got:
 - Proxmox API access with a user and password (or token, but we’re using password here).
 - A network bridge (default `vmbr1`, configurable via `proxmox_network_bridge`) configured in Proxmox, with the CIDR of your choice (default `10.10.10.0/24`, configurable via `proxmox_network_prefix`). If the bridge is internal-only, enable NAT/IP forwarding on the Proxmox host so VMs reach the internet during cloud-init.
 - Enough resources for VMs (e.g., 1 DNS VM, 1+ control plane, 3+ worker nodes).
+- Storages registered in Proxmox for the three datastore roles (see
+  `pvesm status`):
+  - `proxmox_vm_datastore_name` (default `data`) — VM OS disks. ZFS pool:
+    `pvesm add zfspool data --pool data --content images,rootdir`.
+  - `longhorn_datastore_name` (default `storage`) — workers' Longhorn data
+    disk (ZFS pool as above).
+  - `proxmox_datastore_name` (default `local`) — cloud-init snippets and the
+    Ubuntu image; must be a `dir`-type storage with `snippets,iso` content
+    (ZFS pools don't support those content types).
 
 ## 🚀 Getting Started
 
@@ -72,7 +81,9 @@ proxmox_vm_password = "your-vm-password"
 
 # Cluster config
 proxmox_node_name = "proxmox"
-proxmox_datastore_name = "local"
+proxmox_datastore_name    = "local"   # snippets/ISO (dir storage)
+proxmox_vm_datastore_name = "data"    # VM OS disks (ZFS pool)
+longhorn_datastore_name   = "storage" # workers' Longhorn data disk (ZFS pool)
 proxmox_network_bridge = "vmbr1"
 proxmox_network_prefix = "10.10.10"
 proxmox_number_of_vm_k8s_control_plane = "1"
@@ -126,33 +137,54 @@ Time to fire it up! Run these commands:
 
 ```bash
 terraform init
-terraform plan  # Check what’s gonna happen
-terraform apply --auto-approve
+terraform plan                            # Check what’s gonna happen
+terraform apply -parallelism=1 --auto-approve
 ```
 
-This will:
+> **Why `-parallelism=1`?** Creating several VM disks at once on the same ZFS
+> pool can make `zfs create` time out on the Proxmox side (seen on HDD pools),
+> failing the apply. Serial creation is slower but reliable. If a VM does fail
+> with `creating custom disk ... got timeout`, just `terraform taint` that VM
+> and apply again.
 
-- Spin up a DNS VM (if enabled) at `10.10.10.3`.
-- Create control plane VMs (e.g., `k8s-control-plane-0` at `10.10.10.50`) and worker nodes (e.g., `k8s-worker-0` at `10.10.10.60`).
-- Configure each VM with cloud-init to install containerd, kubeadm, and Calico CNI.
-- Bootstrap the K8s cluster using kubeadm, with the first control plane node running a temporary HTTP server (port 8000) to share the join token.
+The apply is fully hands-off and runs in this sequence (dependencies enforce
+the order — no manual steps in between):
+
+1. **Ubuntu cloud image** downloaded to the snippets/ISO datastore (root
+   resource, shared by all VMs).
+2. **BIND9 DNS VM** (`10.10.10.3`) created and configured. Its cloud-init only
+   starts the QEMU guest agent after the DNS zones are validated, and the k8s
+   module has `depends_on` on it — so the cluster VMs are only created once
+   DNS is actually answering (kubeadm needs it).
+3. **Control plane + worker VMs** created (OS disks on
+   `proxmox_vm_datastore_name`, workers' Longhorn disk on
+   `longhorn_datastore_name`). Cloud-init installs containerd/kubeadm and
+   bootstraps the cluster: the first control plane runs `kubeadm init` and
+   serves the join token over a temporary HTTP server (port 8000); the other
+   nodes poll it and join.
+4. **`null_resource.cluster_access`** waits for the kubeconfig to appear on
+   control-plane-0 (kubeadm takes several minutes after the VMs exist; the
+   script polls for up to 20 min), copies it to `./kubeconfig` and opens the
+   SSH tunnel `127.0.0.1:16443` (16443 to avoid clashing with local
+   Kubernetes distros like Docker Desktop on 6443).
+5. **Addons** installed via Helm through the tunnel (MetalLB, cert-manager,
+   Longhorn, ingress-nginx, metrics-server, Rancher), then DNAT and public
+   DNS records.
+
+Total time: ~20-35 min depending on storage speed.
 
 ### 5. Access Your Cluster
 
-Once `terraform apply` finishes (takes ~7-12 minutes), SSH into the first control plane node (`k8s-control-plane-0`):
+No SSH needed — the apply already dropped a ready-to-use kubeconfig in the
+repo root:
 
 ```bash
-ssh ubuntu@10.10.10.50
+KUBECONFIG=./kubeconfig kubectl get nodes
 ```
 
-Check the cluster:
-
-```bash
-export KUBECONFIG=/home/ubuntu/.kube/config
-kubectl get nodes
-```
-
-You should see your control plane and worker nodes in `Ready` state. The kubeconfig is already set up at `/home/ubuntu/.kube/config` on the first control plane node.
+You should see all control plane and worker nodes `Ready`. (The same
+kubeconfig also lives at `/home/ubuntu/.kube/config` on control-plane-0, and
+`ssh ubuntu@10.10.10.50` still works if you ever want a shell.)
 
 ### 6. Kubernetes Addons (MetalLB, ingress-nginx, cert-manager, Rancher)
 
@@ -162,7 +194,7 @@ manual:
 
 - `null_resource.cluster_access` — fetches the kubeconfig from the control
   plane via `qm guest exec` (no SSH key needed inside the VMs) and keeps an
-  SSH tunnel to the cluster API on `127.0.0.1:6443`. Runs on every apply.
+  SSH tunnel to the cluster API on `127.0.0.1:16443`. Runs on every apply.
 - `null_resource.proxmox_dnat` — DNATs ports 80/443 on the Proxmox host to
   the MetalLB VIP (`<network_prefix>.100`) and persists the rules.
 - `null_resource.public_dns` — upserts the public `A` records (apex +
@@ -176,10 +208,8 @@ plus two gitignored files: `secret.auto.tfvars` (credentials) and the GCP
 service account key at
 `kubernetes/lets-encrypt-dns-google/cert-manager-dns01.json`.
 
-```bash
-terraform init
-terraform apply
-```
+No extra command — this is the same `terraform apply -parallelism=1` from
+step 4.
 
 Validate the wildcard certificate (DNS-01 issuance takes a few minutes):
 
@@ -226,7 +256,7 @@ With the VPN up you can skip the SSH tunnel entirely: generate a direct
 kubeconfig once and use it from any VPN-connected machine:
 
 ```bash
-sed -e 's|server: https://127.0.0.1:6443|server: https://10.10.10.50:6443|' \
+sed -e 's|server: https://127.0.0.1:16443|server: https://10.10.10.50:6443|' \
     -e '/tls-server-name: kubernetes/d' kubeconfig > kubeconfig-vpn
 KUBECONFIG=./kubeconfig-vpn kubectl get nodes
 ```

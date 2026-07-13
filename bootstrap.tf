@@ -21,6 +21,7 @@ resource "null_resource" "cluster_access" {
       CP_IP          = local.control_plane_ip
       SSH_PASSWORD   = var.proxmox_user_password
       KUBECONFIG_OUT = var.kubeconfig_path
+      TUNNEL_PORT    = var.tunnel_local_port
     }
   }
 
