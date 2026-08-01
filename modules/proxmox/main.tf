@@ -15,6 +15,7 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config_ha" {
       proxmox_vm_name_k8s_worker_node        = var.proxmox_vm_name_k8s_worker_node
       proxmox_vm_user                        = var.proxmox_vm_user
       ssh_public_key                         = trimspace(data.local_file.ssh_public_key.content)
+      storage_backend                        = var.storage_backend
     })
 
     file_name = "cloud-config-ha.yaml"
@@ -114,7 +115,7 @@ resource "proxmox_virtual_environment_vm" "k8s-worker-node" {
   }
 
   disk {
-    datastore_id = var.longhorn_datastore_name
+    datastore_id = var.data_disk_datastore_name
     file_format  = "raw"
     interface    = "virtio1"
     iothread     = true

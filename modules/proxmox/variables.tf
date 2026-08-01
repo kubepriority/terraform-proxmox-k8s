@@ -74,10 +74,15 @@ variable "proxmox_vm_datastore_name" {
   default     = "data"
 }
 
-variable "longhorn_datastore_name" {
-  description = "Datastore do disco de dados dos workers (Longhorn)"
+variable "data_disk_datastore_name" {
+  description = "Datastore do disco de dados dos workers (Longhorn ou OSD Ceph)"
   type        = string
   default     = "storage"
+}
+
+variable "storage_backend" {
+  type        = string
+  description = "longhorn: formata/monta /dev/vdb no cloud-init; ceph: deixa vdb raw para OSD"
 }
 
 variable "proxmox_network_bridge" {

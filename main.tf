@@ -46,7 +46,8 @@ module "proxmox" {
   worker_memory                          = var.worker_memory
   proxmox_datastore_name                 = var.proxmox_datastore_name
   proxmox_vm_datastore_name              = var.proxmox_vm_datastore_name
-  longhorn_datastore_name                = var.longhorn_datastore_name
+  data_disk_datastore_name               = var.data_disk_datastore_name
+  storage_backend                        = var.storage_backend
   vm_image_id                            = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
 
   # kubeadm precisa do DNS (bind9) resolvendo antes das VMs k8s bootarem.
@@ -68,10 +69,10 @@ module "k8s_addons" {
   passbolt_hostname          = "passbolt.${var.domain}"
   enable_rancher             = var.enable_rancher
   enable_metrics_server      = var.enable_metrics_server
-  enable_longhorn            = var.enable_longhorn
   enable_argocd              = var.enable_argocd
   enable_passbolt            = var.enable_passbolt
-  longhorn_replicas          = var.longhorn_replicas
+  storage_backend            = var.storage_backend
+  storage_replicas           = var.storage_replicas
 
   depends_on = [module.proxmox, null_resource.cluster_access]
 }

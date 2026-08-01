@@ -64,15 +64,14 @@ variable "enable_metrics_server" {
   default     = true
 }
 
-variable "enable_longhorn" {
-  type        = bool
-  description = "Instala o Longhorn (storage distribuído, block e filesystem)"
-  default     = true
+variable "storage_backend" {
+  type        = string
+  description = "longhorn instala Longhorn + SCs longhorn-*; ceph instala Rook-Ceph + SCs ceph-*"
 }
 
-variable "longhorn_replicas" {
+variable "storage_replicas" {
   type        = number
-  description = "Réplicas por volume Longhorn (máx = nº de workers)"
+  description = "Réplicas por volume (Longhorn) / size do replicated pool (Ceph)"
   default     = 3
 }
 

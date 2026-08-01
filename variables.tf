@@ -79,11 +79,6 @@ variable "proxmox_vm_datastore_name" {
   default     = "data"
 }
 
-variable "longhorn_datastore_name" {
-  description = "Datastore do disco de dados dos workers para o Longhorn (pool ZFS 'storage')"
-  type        = string
-  default     = "storage"
-}
 variable "kubeconfig_path" {
   type        = string
   description = "Caminho do kubeconfig do cluster (gerado por scripts/get-kubeconfig.sh)"
@@ -175,16 +170,26 @@ variable "vpn_site_remote_cidr" {
   default     = ""
 }
 
-variable "enable_longhorn" {
-  type        = bool
-  description = "Instala o Longhorn (storage distribuído, block e filesystem)"
-  default     = true
+variable "storage_backend" {
+  type        = string
+  description = "Backend de storage do cluster: longhorn (pve01, legado) ou ceph (Rook-Ceph)"
+  default     = "longhorn"
+  validation {
+    condition     = contains(["longhorn", "ceph"], var.storage_backend)
+    error_message = "storage_backend deve ser \"longhorn\" ou \"ceph\"."
+  }
 }
 
-variable "longhorn_replicas" {
+variable "storage_replicas" {
   type        = number
-  description = "Réplicas por volume Longhorn (máx = nº de workers)"
+  description = "Réplicas por volume (Longhorn) ou tamanho do replicated pool (Ceph). Máx = nº de workers"
   default     = 3
+}
+
+variable "data_disk_datastore_name" {
+  type        = string
+  description = "Datastore Proxmox (ZFS) do disco de dados dos workers (Longhorn ou OSD Ceph)"
+  default     = "storage"
 }
 
 variable "worker_data_disk_size" {

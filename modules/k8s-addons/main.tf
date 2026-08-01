@@ -119,7 +119,7 @@ resource "helm_release" "metrics_server" {
 }
 
 resource "helm_release" "longhorn" {
-  count            = var.enable_longhorn ? 1 : 0
+  count            = var.storage_backend == "longhorn" ? 1 : 0
   name             = "longhorn"
   repository       = "https://charts.longhorn.io"
   chart            = "longhorn"
@@ -136,7 +136,7 @@ resource "helm_release" "longhorn" {
       }
       persistence = {
         defaultClass             = true
-        defaultClassReplicaCount = var.longhorn_replicas
+        defaultClassReplicaCount = var.storage_replicas
       }
     })
   ]
@@ -145,14 +145,14 @@ resource "helm_release" "longhorn" {
 # SCs nomeadas por convencao de uso: longhorn-fs (Filesystem) e
 # longhorn-block (Block). Nota: volumeMode e sempre decidido no PVC.
 resource "helm_release" "longhorn_classes" {
-  count     = var.enable_longhorn ? 1 : 0
+  count     = var.storage_backend == "longhorn" ? 1 : 0
   name      = "longhorn-classes"
   chart     = "${path.module}/../../charts/longhorn-classes"
   namespace = "longhorn-system"
 
   set {
     name  = "replicas"
-    value = var.longhorn_replicas
+    value = var.storage_replicas
   }
 
   depends_on = [helm_release.longhorn]
