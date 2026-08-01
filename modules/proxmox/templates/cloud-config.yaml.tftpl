@@ -51,14 +51,14 @@ write_files:
     permissions: '0644'
   - path: /root/kubeadm-config.yaml
     content: |
-      apiVersion: kubeadm.k8s.io/v1beta4
+      apiVersion: kubeadm.k8s.io/${k8s_kubeadm_api_version}
       kind: InitConfiguration
       nodeRegistration:
         name: ${proxmox_vm_name_k8s_control_plane}0
       ---
-      apiVersion: kubeadm.k8s.io/v1beta4
+      apiVersion: kubeadm.k8s.io/${k8s_kubeadm_api_version}
       kind: ClusterConfiguration
-      kubernetesVersion: v1.35.7
+      kubernetesVersion: ${k8s_cluster_version}
       controlPlaneEndpoint: ${format("%s.%d", proxmox_network_prefix, k8s_control_plane_ip_start)}:6443
       networking:
         podSubnet: 10.45.0.0/16
@@ -165,7 +165,7 @@ runcmd:
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "containerd key setup failed" >> /tmp/cloud-init.log; exit 1; }
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
     apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for containerd failed" >> /tmp/cloud-init.log; exit 1; }
-    apt install -y containerd.io=2.2.6-1~ubuntu.24.04~noble >> /tmp/cloud-init.log 2>&1 || { echo "containerd install failed" >> /tmp/cloud-init.log; exit 1; }
+    apt install -y containerd.io=${containerd_package_version}~ubuntu.24.04~noble >> /tmp/cloud-init.log 2>&1 || { echo "containerd install failed" >> /tmp/cloud-init.log; exit 1; }
     containerd config default | tee /etc/containerd/config.toml >> /tmp/cloud-init.log 2>&1
     sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml >> /tmp/cloud-init.log 2>&1
     systemctl restart containerd >> /tmp/cloud-init.log 2>&1 || { echo "containerd restart failed" >> /tmp/cloud-init.log; exit 1; }
@@ -173,10 +173,10 @@ runcmd:
   # Install Kubernetes components
   - |
     echo "Installing Kubernetes components" >> /tmp/cloud-init.log
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | gpg --dearmor --yes -o /usr/share/keyrings/kubernetes-apt-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes key setup failed" >> /tmp/cloud-init.log; exit 1; }
-    echo "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/${k8s_apt_channel}/deb/Release.key | gpg --dearmor --yes -o /usr/share/keyrings/kubernetes-apt-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes key setup failed" >> /tmp/cloud-init.log; exit 1; }
+    echo "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/${k8s_apt_channel}/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
     apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for Kubernetes failed" >> /tmp/cloud-init.log; exit 1; }
-    apt install -y kubelet=1.35.7-1.1 kubeadm=1.35.7-1.1 kubectl=1.35.7-1.1 >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes install failed" >> /tmp/cloud-init.log; exit 1; }
+    apt install -y kubelet=${k8s_package_version} kubeadm=${k8s_package_version} kubectl=${k8s_package_version} >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes install failed" >> /tmp/cloud-init.log; exit 1; }
     apt-mark hold kubelet kubeadm kubectl >> /tmp/cloud-init.log 2>&1
 %{ if storage_backend == "longhorn" ~}
     # Longhorn: iscsi para attach de volumes, nfs para RWX

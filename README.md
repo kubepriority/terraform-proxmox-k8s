@@ -24,6 +24,17 @@ dedicated server, `pve01`):
 Known gaps: Kubernetes API endpoint still points at control-plane-0
 (`10.10.10.50:6443`) — kube-vip planned; see Coming Soon.
 
+**Two workspaces share this code**: the `default` Terraform workspace targets
+`pve01` (kubeadm v1.30, Longhorn, production — table above) via
+`secret.auto-pve01.tfvars`; the `pve02` workspace targets a second, recently
+rebuilt server on kubeadm **v1.35.7** with **Rook-Ceph** storage via
+`secret.auto-pve02.tfvars`. Per-workspace Kubernetes/containerd/Rancher chart
+versions are set with `k8s_package_version`, `k8s_apt_channel`,
+`k8s_kubeadm_api_version`, `containerd_package_version`, `k8s_cluster_version`
+and `rancher_chart_version` (defaults in `variables.tf` match pve01; pve02's
+tfvars overrides them). Always confirm `terraform workspace show` before
+`plan`/`apply`.
+
 ## 🛠️ Tech Stack
 
 - **Terraform**: Infra as code — VMs, DNS, DNAT, VPN and all cluster addons.
@@ -48,8 +59,9 @@ Before you kick things off, make sure you’ve got:
   `pvesm status`):
   - `proxmox_vm_datastore_name` (default `data`) — VM OS disks. ZFS pool:
     `pvesm add zfspool data --pool data --content images,rootdir`.
-  - `longhorn_datastore_name` (default `storage`) — workers' Longhorn data
-    disk (ZFS pool as above).
+  - `data_disk_datastore_name` (default `storage`) — workers' data disk (ZFS
+    pool as above); backs Longhorn or the Rook-Ceph OSDs depending on
+    `storage_backend`.
   - `proxmox_datastore_name` (default `local`) — cloud-init snippets and the
     Ubuntu image; must be a `dir`-type storage with `snippets,iso` content
     (ZFS pools don't support those content types).
@@ -83,7 +95,7 @@ proxmox_vm_password = "your-vm-password"
 proxmox_node_name = "proxmox"
 proxmox_datastore_name    = "local"   # snippets/ISO (dir storage)
 proxmox_vm_datastore_name = "data"    # VM OS disks (ZFS pool)
-longhorn_datastore_name   = "storage" # workers' Longhorn data disk (ZFS pool)
+data_disk_datastore_name  = "storage" # workers' data disk (ZFS pool)
 proxmox_network_bridge = "vmbr1"
 proxmox_network_prefix = "10.10.10"
 proxmox_number_of_vm_k8s_control_plane = "1"
@@ -158,7 +170,7 @@ the order — no manual steps in between):
    DNS is actually answering (kubeadm needs it).
 3. **Control plane + worker VMs** created (OS disks on
    `proxmox_vm_datastore_name`, workers' Longhorn disk on
-   `longhorn_datastore_name`). Cloud-init installs containerd/kubeadm and
+   `data_disk_datastore_name`). Cloud-init installs containerd/kubeadm and
    bootstraps the cluster: the first control plane runs `kubeadm init` and
    serves the join token over a temporary HTTP server (port 8000); the other
    nodes poll it and join.
@@ -261,24 +273,30 @@ sed -e 's|server: https://127.0.0.1:16443|server: https://10.10.10.50:6443|' \
 KUBECONFIG=./kubeconfig-vpn kubectl get nodes
 ```
 
-### 8. Storage (Longhorn)
+### 8. Storage (Longhorn or Rook-Ceph)
 
-Longhorn provides replicated storage over the workers' dedicated data disks.
-Capacity and replication live in `secret.auto.tfvars`:
+`storage_backend` picks the backend: `"longhorn"` (default, pve01) or
+`"ceph"` (Rook-Ceph, pve02). It controls both the cloud-init disk setup
+(Longhorn formats `/dev/vdb` as ext4; Ceph leaves it raw for the OSD) and
+which Helm addon/StorageClasses get installed. Capacity and replication live
+in `secret.auto.tfvars`:
 
 ```hcl
+storage_backend       = "longhorn" # or "ceph"
 worker_data_disk_size = 100 # GB per worker (grow-only; shrinking recreates the VM)
-longhorn_replicas     = 3   # copies of each volume (max = number of workers)
+storage_replicas      = 3   # copies of each volume (Longhorn) / replicated pool size (Ceph); max = number of workers
 ```
 
 Usable pool ≈ `workers × disk ÷ replicas` (3×100 ÷ 3 ≈ 100GB). Volume **size is
 set per PVC**, not on the StorageClass. Available classes:
 
-| StorageClass | Use |
-|---|---|
-| `longhorn` (default) | PVC without a class lands here — filesystem |
-| `longhorn-fs` | Named convention for filesystem volumes |
-| `longhorn-block` | Named convention for raw block volumes |
+| StorageClass | Backend | Use |
+|---|---|---|
+| `longhorn` (default) | Longhorn | PVC without a class lands here — filesystem |
+| `longhorn-fs` | Longhorn | Named convention for filesystem volumes |
+| `longhorn-block` | Longhorn | Named convention for raw block volumes |
+| `ceph-block` | Rook-Ceph | RWO block volumes (RBD) |
+| `ceph-fs` | Rook-Ceph | Shared filesystem volumes (CephFS, RWX-capable) |
 
 `volumeMode` is always decided by the PVC (Kubernetes default: `Filesystem`).
 A bare PVC gives you an ext4 volume with 3 replicas:

@@ -140,3 +140,35 @@ variable "vm_image_id" {
   description = "Ubuntu cloud image id (recurso criado no root)"
   type        = string
 }
+
+# ── Versões do Kubernetes/containerd (default = pve01; pve02 sobrescreve) ────
+
+variable "k8s_package_version" {
+  type        = string
+  description = "Versão dos pacotes apt kubelet/kubeadm/kubectl"
+  default     = "1.30.0-1.1"
+}
+
+variable "k8s_apt_channel" {
+  type        = string
+  description = "Canal do repositório apt pkgs.k8s.io (ex: v1.30, v1.35)"
+  default     = "v1.30"
+}
+
+variable "k8s_kubeadm_api_version" {
+  type        = string
+  description = "apiVersion do kubeadm-config (kubeadm.k8s.io/vX)"
+  default     = "v1beta3"
+}
+
+variable "containerd_package_version" {
+  type        = string
+  description = "Versão do pacote apt containerd.io (sem o sufixo ~ubuntu.24.04~noble)"
+  default     = "1.7.27-1"
+}
+
+variable "k8s_cluster_version" {
+  type        = string
+  description = "kubernetesVersion do kubeadm-config (ClusterConfiguration)"
+  default     = "v1.30.0"
+}

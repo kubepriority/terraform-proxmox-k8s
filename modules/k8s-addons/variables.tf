@@ -75,6 +75,12 @@ variable "storage_replicas" {
   default     = 3
 }
 
+variable "rancher_chart_version" {
+  type        = string
+  description = "Versão do chart Helm do Rancher (2.13.x recusa k8s >= 1.35; 2.14.x exige >= ... < 1.36)"
+  default     = "2.13.3"
+}
+
 variable "enable_argocd" {
   type        = bool
   description = "Instala o Argo CD (GitOps)"

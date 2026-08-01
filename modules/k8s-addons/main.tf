@@ -300,8 +300,9 @@ resource "helm_release" "rancher" {
   repository       = "https://releases.rancher.com/server-charts/stable"
   chart            = "rancher"
   # 2.13.x declara kubeVersion < 1.35.0-0 e o helm recusa instalar no k8s 1.35;
-  # 2.14.x aceita ate < 1.36.0-0.
-  version          = "2.14.3"
+  # 2.14.x aceita ate < 1.36.0-0. Por workspace: default 2.13.3 (pve01, k8s 1.30),
+  # pve02 (k8s 1.35.7) sobrescreve para 2.14.3 via rancher_chart_version.
+  version          = var.rancher_chart_version
   namespace        = "cattle-system"
   create_namespace = true
   timeout          = 600

@@ -49,6 +49,11 @@ module "proxmox" {
   data_disk_datastore_name               = var.data_disk_datastore_name
   storage_backend                        = var.storage_backend
   vm_image_id                            = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
+  k8s_package_version                    = var.k8s_package_version
+  k8s_apt_channel                        = var.k8s_apt_channel
+  k8s_kubeadm_api_version                = var.k8s_kubeadm_api_version
+  containerd_package_version             = var.containerd_package_version
+  k8s_cluster_version                    = var.k8s_cluster_version
 
   # kubeadm precisa do DNS (bind9) resolvendo antes das VMs k8s bootarem.
   # O guest agent do bind9 so inicia no fim do cloud-init dele, entao a
@@ -73,6 +78,7 @@ module "k8s_addons" {
   enable_passbolt            = var.enable_passbolt
   storage_backend            = var.storage_backend
   storage_replicas           = var.storage_replicas
+  rancher_chart_version      = var.rancher_chart_version
 
   depends_on = [module.proxmox, null_resource.cluster_access]
 }

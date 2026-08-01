@@ -16,6 +16,11 @@ resource "proxmox_virtual_environment_file" "k8s_cloud_config_ha" {
       proxmox_vm_user                        = var.proxmox_vm_user
       ssh_public_key                         = trimspace(data.local_file.ssh_public_key.content)
       storage_backend                        = var.storage_backend
+      k8s_package_version                    = var.k8s_package_version
+      k8s_apt_channel                        = var.k8s_apt_channel
+      k8s_kubeadm_api_version                = var.k8s_kubeadm_api_version
+      containerd_package_version             = var.containerd_package_version
+      k8s_cluster_version                    = var.k8s_cluster_version
     })
 
     file_name = "cloud-config-ha.yaml"
