@@ -158,6 +158,106 @@ resource "helm_release" "longhorn_classes" {
   depends_on = [helm_release.longhorn]
 }
 
+# Rook-Ceph (storage_backend = "ceph"): operator + cluster. OSDs usam o disco
+# de dados raw dos workers (/dev/vdb, virtio1). SCs: ceph-block (RBD, default)
+# e ceph-fs (CephFS RWX). Object store (RGW) fora por YAGNI.
+resource "helm_release" "rook_ceph" {
+  count            = var.storage_backend == "ceph" ? 1 : 0
+  name             = "rook-ceph"
+  repository       = "https://charts.rook.io/release"
+  chart            = "rook-ceph"
+  version          = "v1.20.3"
+  namespace        = "rook-ceph"
+  create_namespace = true
+  timeout          = 600
+}
+
+resource "helm_release" "rook_ceph_cluster" {
+  count      = var.storage_backend == "ceph" ? 1 : 0
+  name       = "rook-ceph-cluster"
+  repository = "https://charts.rook.io/release"
+  chart      = "rook-ceph-cluster"
+  version    = "v1.20.3"
+  namespace  = "rook-ceph"
+  # OSDs so ficam prontos depois de mon quorum + prepare jobs; 20 min de folga.
+  timeout = 1200
+
+  values = [
+    yamlencode({
+      operatorNamespace = "rook-ceph"
+      toolbox           = { enabled = true }
+      cephClusterSpec = {
+        dashboard = { enabled = false }
+        mon       = { count = 3, allowMultiplePerNode = false }
+        storage = {
+          useAllNodes   = true
+          useAllDevices = false
+          deviceFilter  = "^vdb$"
+        }
+      }
+      cephBlockPools = [{
+        name = "ceph-blockpool"
+        spec = {
+          failureDomain = "host"
+          replicated    = { size = var.storage_replicas }
+        }
+        storageClass = {
+          enabled              = true
+          name                 = "ceph-block"
+          isDefault            = true
+          reclaimPolicy        = "Delete"
+          allowVolumeExpansion = true
+          parameters = {
+            imageFormat                                             = "2"
+            imageFeatures                                           = "layering"
+            "csi.storage.k8s.io/fstype"                             = "ext4"
+            "csi.storage.k8s.io/provisioner-secret-name"            = "rook-csi-rbd-provisioner"
+            "csi.storage.k8s.io/provisioner-secret-namespace"       = "rook-ceph"
+            "csi.storage.k8s.io/controller-expand-secret-name"      = "rook-csi-rbd-provisioner"
+            "csi.storage.k8s.io/controller-expand-secret-namespace" = "rook-ceph"
+            "csi.storage.k8s.io/node-stage-secret-name"             = "rook-csi-rbd-node"
+            "csi.storage.k8s.io/node-stage-secret-namespace"        = "rook-ceph"
+          }
+        }
+      }]
+      cephFileSystems = [{
+        name = "ceph-filesystem"
+        spec = {
+          metadataPool = { replicated = { size = var.storage_replicas } }
+          dataPools = [{
+            name          = "data0"
+            failureDomain = "host"
+            replicated    = { size = var.storage_replicas }
+          }]
+          metadataServer = {
+            activeCount   = 1
+            activeStandby = true
+          }
+        }
+        storageClass = {
+          enabled              = true
+          name                 = "ceph-fs"
+          isDefault            = false
+          pool                 = "data0"
+          reclaimPolicy        = "Delete"
+          allowVolumeExpansion = true
+          parameters = {
+            "csi.storage.k8s.io/provisioner-secret-name"            = "rook-csi-cephfs-provisioner"
+            "csi.storage.k8s.io/provisioner-secret-namespace"       = "rook-ceph"
+            "csi.storage.k8s.io/controller-expand-secret-name"      = "rook-csi-cephfs-provisioner"
+            "csi.storage.k8s.io/controller-expand-secret-namespace" = "rook-ceph"
+            "csi.storage.k8s.io/node-stage-secret-name"             = "rook-csi-cephfs-node"
+            "csi.storage.k8s.io/node-stage-secret-namespace"        = "rook-ceph"
+          }
+        }
+      }]
+      cephObjectStores = []
+    })
+  ]
+
+  depends_on = [helm_release.rook_ceph]
+}
+
 moved {
   from = helm_release.rancher
   to   = helm_release.rancher[0]
@@ -303,5 +403,5 @@ resource "helm_release" "passbolt" {
     }
   })]
 
-  depends_on = [helm_release.cert_infra, helm_release.ingress_nginx, helm_release.longhorn_classes]
+  depends_on = [helm_release.cert_infra, helm_release.ingress_nginx, helm_release.longhorn_classes, helm_release.rook_ceph_cluster]
 }
