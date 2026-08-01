@@ -44,25 +44,37 @@ Recriar o cluster k8s do pve02 com:
 ### `secret.auto-pve02.tfvars`
 
 - `control_plane_os_disk_size = 60`
-- `enable_longhorn`/`longhorn_*` → `enable_ceph = true`, `ceph_replicas = 3` (comentários de storage atualizados)
+- `storage_backend = "ceph"`, `storage_replicas = 3` (comentários de storage atualizados)
 
 ### `variables.tf` + `modules/k8s-addons/variables.tf` + `secret.auto.tfvars.example`
 
-- Renomear `enable_longhorn` → `enable_ceph`, `longhorn_replicas` → `ceph_replicas`
-- `longhorn_datastore_name` vira nome neutro (segue sendo o datastore Proxmox do disco de dados dos workers)
+**Correção pós-aprovação (compartilhamento com pve01):** o código é usado pelos dois
+workspaces; remover Longhorn do módulo desinstalaria o Longhorn do pve01 no próximo
+apply, violando o "fora de escopo". Em vez de remover:
+
+- Nova var `storage_backend` (`"longhorn"` | `"ceph"`, default `"longhorn"`) escolhe o
+  backend por workspace — controla pacotes/format do cloud-init e qual conjunto de
+  helm releases instala. `enable_longhorn` deixa de existir (derivado do backend).
+- `longhorn_replicas` → `storage_replicas` (vale para os dois backends)
+- `longhorn_datastore_name` → `data_disk_datastore_name` (neutro)
+- `secret.auto-pve01.tfvars` só troca nomes de chaves (sem mudança de infra)
+- `charts/longhorn-classes` **permanece** no repo (usado pelo pve01)
 
 ### `modules/k8s-addons/main.tf`
 
-- Remover `helm_release.longhorn` e `helm_release.longhorn_classes`
-- Adicionar:
+- `helm_release.longhorn` e `helm_release.longhorn_classes` passam a condicionar em
+  `var.storage_backend == "longhorn"` (pve01 continua com Longhorn)
+- Adicionar (condicionado a `var.storage_backend == "ceph"`, Rook v1.20.3):
   - `helm_release.rook_ceph` (operator, repo `https://charts.rook.io/release`, ns `rook-ceph`)
   - `helm_release.rook_ceph_cluster` (chart `rook-ceph-cluster`): CephCluster com 3 mons, OSDs via filtro de device `sdb` nos workers, `replicated.size = var.ceph_replicas`, toolbox habilitado, dashboard desabilitado
   - SCs pelo values do cluster chart: `ceph-block` (RBD, default) e `ceph-fs` (CephFS, MDS ativo + standby)
 - Dependências de `passbolt`/demais releases que apontavam para `longhorn_classes` passam a apontar para `rook_ceph_cluster`
 
-### `charts/longhorn-classes/`
+### `modules/proxmox/templates/cloud-config.yaml.tftpl` (storage condicional)
 
-- Removido do repo
+- Blocos `disk_setup`/`fs_setup`/`mounts` do `/dev/vdb` e pacotes `open-iscsi`/
+  `nfs-common` só quando `storage_backend == "longhorn"`; `lvm2` e vdb raw quando
+  `"ceph"` (flag chega ao template via módulo proxmox)
 
 ## Execução
 
