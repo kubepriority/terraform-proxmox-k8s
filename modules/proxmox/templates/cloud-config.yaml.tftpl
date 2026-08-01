@@ -5,6 +5,7 @@ bootcmd:
   # without DNS. Replace it with a real file on every boot.
   - rm -f /etc/resolv.conf
   - printf 'nameserver ${proxmox_network_prefix}.3\nnameserver 8.8.8.8\nsearch homelab.local\n' > /etc/resolv.conf
+%{ if storage_backend == "longhorn" ~}
 disk_setup:
   ephemeral0:
     table_type: mbr
@@ -19,6 +20,7 @@ fs_setup:
     device: /dev/vdb1
 mounts:
   - [ vdb, /var/openebs/local, ext4, "defaults,nofail", 0, 0 ]
+%{~ endif }
 users:
   - default
   - name: ${proxmox_vm_user}
@@ -49,14 +51,14 @@ write_files:
     permissions: '0644'
   - path: /root/kubeadm-config.yaml
     content: |
-      apiVersion: kubeadm.k8s.io/v1beta3
+      apiVersion: kubeadm.k8s.io/v1beta4
       kind: InitConfiguration
       nodeRegistration:
         name: ${proxmox_vm_name_k8s_control_plane}0
       ---
-      apiVersion: kubeadm.k8s.io/v1beta3
+      apiVersion: kubeadm.k8s.io/v1beta4
       kind: ClusterConfiguration
-      kubernetesVersion: v1.30.0
+      kubernetesVersion: v1.35.7
       controlPlaneEndpoint: ${format("%s.%d", proxmox_network_prefix, k8s_control_plane_ip_start)}:6443
       networking:
         podSubnet: 10.45.0.0/16
@@ -163,7 +165,7 @@ runcmd:
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --yes -o /usr/share/keyrings/docker-archive-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "containerd key setup failed" >> /tmp/cloud-init.log; exit 1; }
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu noble stable" > /etc/apt/sources.list.d/docker.list
     apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for containerd failed" >> /tmp/cloud-init.log; exit 1; }
-    apt install -y containerd.io=1.7.27-1 >> /tmp/cloud-init.log 2>&1 || { echo "containerd install failed" >> /tmp/cloud-init.log; exit 1; }
+    apt install -y containerd.io=2.2.6-1~ubuntu.24.04~noble >> /tmp/cloud-init.log 2>&1 || { echo "containerd install failed" >> /tmp/cloud-init.log; exit 1; }
     containerd config default | tee /etc/containerd/config.toml >> /tmp/cloud-init.log 2>&1
     sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml >> /tmp/cloud-init.log 2>&1
     systemctl restart containerd >> /tmp/cloud-init.log 2>&1 || { echo "containerd restart failed" >> /tmp/cloud-init.log; exit 1; }
@@ -171,14 +173,19 @@ runcmd:
   # Install Kubernetes components
   - |
     echo "Installing Kubernetes components" >> /tmp/cloud-init.log
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.30/deb/Release.key | gpg --dearmor --yes -o /usr/share/keyrings/kubernetes-apt-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes key setup failed" >> /tmp/cloud-init.log; exit 1; }
-    echo "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.30/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.35/deb/Release.key | gpg --dearmor --yes -o /usr/share/keyrings/kubernetes-apt-keyring.gpg >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes key setup failed" >> /tmp/cloud-init.log; exit 1; }
+    echo "deb [signed-by=/usr/share/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.35/deb/ /" > /etc/apt/sources.list.d/kubernetes.list
     apt update >> /tmp/cloud-init.log 2>&1 || { echo "apt update for Kubernetes failed" >> /tmp/cloud-init.log; exit 1; }
-    apt install -y kubelet=1.30.0-1.1 kubeadm=1.30.0-1.1 kubectl=1.30.0-1.1 >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes install failed" >> /tmp/cloud-init.log; exit 1; }
+    apt install -y kubelet=1.35.7-1.1 kubeadm=1.35.7-1.1 kubectl=1.35.7-1.1 >> /tmp/cloud-init.log 2>&1 || { echo "Kubernetes install failed" >> /tmp/cloud-init.log; exit 1; }
     apt-mark hold kubelet kubeadm kubectl >> /tmp/cloud-init.log 2>&1
+%{ if storage_backend == "longhorn" ~}
     # Longhorn: iscsi para attach de volumes, nfs para RWX
     apt install -y open-iscsi nfs-common >> /tmp/cloud-init.log 2>&1
     systemctl enable --now iscsid >> /tmp/cloud-init.log 2>&1
+%{~ else ~}
+    # Rook-Ceph: ceph-volume prepara OSDs com LVM no host
+    apt install -y lvm2 >> /tmp/cloud-init.log 2>&1
+%{~ endif }
     systemctl enable --now kubelet >> /tmp/cloud-init.log 2>&1
   # Test DNS resolution
   - |
