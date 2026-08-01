@@ -1,0 +1,18 @@
+{{- /*
+Nome do Driver precisa ser exatamente o provisioner das StorageClasses
+(<namespace>.rbd.csi.ceph.com / <namespace>.cephfs.csi.ceph.com), senao o
+operator cria o deployment mas nenhuma SC o encontra.
+*/ -}}
+apiVersion: csi.ceph.io/v1
+kind: Driver
+metadata:
+  name: {{ .Release.Namespace }}.rbd.csi.ceph.com
+  namespace: {{ .Release.Namespace }}
+spec: {}
+---
+apiVersion: csi.ceph.io/v1
+kind: Driver
+metadata:
+  name: {{ .Release.Namespace }}.cephfs.csi.ceph.com
+  namespace: {{ .Release.Namespace }}
+spec: {}

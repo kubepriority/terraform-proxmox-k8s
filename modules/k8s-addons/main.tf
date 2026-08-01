@@ -170,6 +170,37 @@ resource "helm_release" "rook_ceph" {
   namespace        = "rook-ceph"
   create_namespace = true
   timeout          = 600
+
+  values = [
+    yamlencode({
+      # O default do chart e prefixo vazio, que faz o operator procurar SAs
+      # "rbd-ctrlplugin-sa" etc. O bundle de RBAC upstream (chart
+      # ceph-csi-drivers abaixo) cria as SAs com o prefixo do projeto, entao os
+      # dois lados precisam combinar — sem isso os plugins ficam FailedCreate.
+      "ceph-csi-operator" = {
+        controllerManager = {
+          manager = {
+            env = {
+              csiServiceAccountPrefix = "ceph-csi-operator-"
+            }
+          }
+        }
+      }
+    })
+  ]
+}
+
+# O chart rook-ceph instala o ceph-csi-operator mas nao cria os Driver CRs nem
+# as SAs/RBAC dos plugins; sem eles nenhum provisioner sobe e todo PVC fica
+# Pending. Precisa vir antes do cluster para as SCs terem provisioner ao nascer.
+resource "helm_release" "ceph_csi_drivers" {
+  count     = var.storage_backend == "ceph" ? 1 : 0
+  name      = "ceph-csi-drivers"
+  chart     = "${path.module}/../../charts/ceph-csi-drivers"
+  namespace = "rook-ceph"
+  timeout   = 300
+
+  depends_on = [helm_release.rook_ceph]
 }
 
 resource "helm_release" "rook_ceph_cluster" {
@@ -255,7 +286,7 @@ resource "helm_release" "rook_ceph_cluster" {
     })
   ]
 
-  depends_on = [helm_release.rook_ceph]
+  depends_on = [helm_release.rook_ceph, helm_release.ceph_csi_drivers]
 }
 
 moved {
@@ -268,7 +299,9 @@ resource "helm_release" "rancher" {
   name             = "rancher"
   repository       = "https://releases.rancher.com/server-charts/stable"
   chart            = "rancher"
-  version          = "2.13.3"
+  # 2.13.x declara kubeVersion < 1.35.0-0 e o helm recusa instalar no k8s 1.35;
+  # 2.14.x aceita ate < 1.36.0-0.
+  version          = "2.14.3"
   namespace        = "cattle-system"
   create_namespace = true
   timeout          = 600

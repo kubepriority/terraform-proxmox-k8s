@@ -1,0 +1,11 @@
+apiVersion: v2
+name: ceph-csi-drivers
+description: |
+  Driver CRs e RBAC dos plugins do ceph-csi-operator. O chart rook-ceph v1.20.x
+  instala o ceph-csi-operator mas nao cria nem os Driver CRs nem as
+  ServiceAccounts/RBAC dos plugins, entao sem isto o provisioner nunca sobe e
+  todo PVC fica Pending. RBAC copiado de ceph-csi-operator v0.2.0
+  (deploy/multifile/csi-rbac.yaml), com o namespace apontado para o release.
+type: application
+version: 0.1.0
+appVersion: "0.2.0"
