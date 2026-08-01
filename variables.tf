@@ -193,6 +193,42 @@ variable "worker_data_disk_size" {
   default     = 100
 }
 
+variable "control_plane_os_disk_size" {
+  type        = number
+  description = "Tamanho (GB) do disco de SO dos control planes. Só cresce."
+  default     = 40
+}
+
+variable "worker_os_disk_size" {
+  type        = number
+  description = "Tamanho (GB) do disco de SO dos workers. Só cresce."
+  default     = 30
+}
+
+variable "control_plane_cores" {
+  type        = number
+  description = "vCPUs por control plane."
+  default     = 4
+}
+
+variable "worker_cores" {
+  type        = number
+  description = "vCPUs por worker."
+  default     = 8
+}
+
+variable "control_plane_memory" {
+  type        = number
+  description = "RAM dedicada (MB) por control plane. Soma de todas as VMs precisa caber na RAM do host com folga para SO + ARC ZFS."
+  default     = 8192
+}
+
+variable "worker_memory" {
+  type        = number
+  description = "RAM dedicada (MB) por worker. Mesma regra: sem overcommit no host."
+  default     = 16384
+}
+
 variable "tunnel_local_port" {
   type        = string
   description = "Porta local do túnel SSH para a API do cluster (16443+; um por servidor)"

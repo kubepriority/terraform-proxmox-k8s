@@ -38,7 +38,29 @@ resource "helm_release" "ingress_nginx" {
     value = "ingress-nginx/ingress-nginx-tls"
   }
 
-  depends_on = [helm_release.metallb_config]
+  set {
+    name  = "controller.metrics.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "controller.metrics.service.enabled"
+    value = "true"
+  }
+
+  set {
+    name  = "controller.metrics.service.type"
+    value = "ClusterIP"
+  }
+
+  set {
+    name  = "controller.metrics.service.servicePort"
+    value = "10254"
+  }
+
+  depends_on = [
+    helm_release.metallb_config
+  ]
 }
 
 resource "helm_release" "cert_manager" {

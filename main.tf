@@ -38,6 +38,12 @@ module "proxmox" {
   proxmox_network_bridge                 = var.proxmox_network_bridge
   proxmox_network_prefix                 = var.proxmox_network_prefix
   worker_data_disk_size                  = var.worker_data_disk_size
+  control_plane_os_disk_size             = var.control_plane_os_disk_size
+  worker_os_disk_size                    = var.worker_os_disk_size
+  control_plane_cores                    = var.control_plane_cores
+  worker_cores                           = var.worker_cores
+  control_plane_memory                   = var.control_plane_memory
+  worker_memory                          = var.worker_memory
   proxmox_datastore_name                 = var.proxmox_datastore_name
   proxmox_vm_datastore_name              = var.proxmox_vm_datastore_name
   longhorn_datastore_name                = var.longhorn_datastore_name

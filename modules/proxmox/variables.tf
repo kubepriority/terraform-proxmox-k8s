@@ -95,6 +95,42 @@ variable "worker_data_disk_size" {
   default     = 100
 }
 
+variable "control_plane_os_disk_size" {
+  type        = number
+  description = "Tamanho (GB) do disco de SO dos control planes. Só cresce."
+  default     = 40
+}
+
+variable "worker_os_disk_size" {
+  type        = number
+  description = "Tamanho (GB) do disco de SO dos workers. Só cresce."
+  default     = 30
+}
+
+variable "control_plane_cores" {
+  type        = number
+  description = "vCPUs por control plane."
+  default     = 4
+}
+
+variable "worker_cores" {
+  type        = number
+  description = "vCPUs por worker."
+  default     = 8
+}
+
+variable "control_plane_memory" {
+  type        = number
+  description = "RAM dedicada (MB) por control plane. Soma de todas as VMs deve caber na RAM do host com folga para SO + ARC do ZFS — overcommit derruba VM via OOM killer."
+  default     = 8192
+}
+
+variable "worker_memory" {
+  type        = number
+  description = "RAM dedicada (MB) por worker. Mesma regra: sem overcommit no host."
+  default     = 16384
+}
+
 variable "vm_image_id" {
   description = "Ubuntu cloud image id (recurso criado no root)"
   type        = string

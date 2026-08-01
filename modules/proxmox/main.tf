@@ -51,17 +51,17 @@ resource "proxmox_virtual_environment_vm" "k8s-control-plane" {
     interface    = "virtio0"
     iothread     = true
     discard      = "on"
-    size         = 40
+    size         = var.control_plane_os_disk_size
   }
 
   cpu {
     architecture = "x86_64"
-    cores        = 4
+    cores        = var.control_plane_cores
     type         = "host"
   }
 
   memory {
-    dedicated = 8192
+    dedicated = var.control_plane_memory
   }
 
   network_device {
@@ -110,7 +110,7 @@ resource "proxmox_virtual_environment_vm" "k8s-worker-node" {
     interface    = "virtio0"
     iothread     = true
     discard      = "on"
-    size         = 30
+    size         = var.worker_os_disk_size
   }
 
   disk {
@@ -124,12 +124,12 @@ resource "proxmox_virtual_environment_vm" "k8s-worker-node" {
 
   cpu {
     architecture = "x86_64"
-    cores        = 8
+    cores        = var.worker_cores
     type         = "host"
   }
 
   memory {
-    dedicated = 16384
+    dedicated = var.worker_memory
   }
 
   network_device {
