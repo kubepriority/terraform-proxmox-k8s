@@ -104,3 +104,53 @@ variable "passbolt_hostname" {
   description = "Hostname público do Passbolt"
   default     = "passbolt.kubepriority.com.br"
 }
+
+variable "smtp_host" {
+  type        = string
+  description = "Host SMTP do Passbolt (vazio = mantem defaults do chart, sem envio de e-mail)"
+  default     = ""
+}
+
+variable "smtp_port" {
+  type        = number
+  description = "Porta SMTP (587 = STARTTLS)"
+  default     = 587
+}
+
+variable "smtp_username" {
+  type        = string
+  description = "Usuario SMTP"
+  sensitive   = true
+  default     = ""
+}
+
+variable "smtp_password" {
+  type        = string
+  description = "Senha SMTP"
+  sensitive   = true
+  default     = ""
+}
+
+variable "smtp_from" {
+  type        = string
+  description = "Remetente dos e-mails do Passbolt (dominio precisa estar verificado no provedor)"
+  default     = ""
+}
+
+variable "passbolt_ha" {
+  type        = bool
+  description = "true mantem mariadb replicado + redis sentinel (3 nos) + 2 apps; false deixa instancia unica. Trocar para false RECRIA o banco (PVC antigo vira orfao)"
+  default     = true
+}
+
+variable "passbolt_public_registration" {
+  type        = bool
+  description = "Permite auto-cadastro no Passbolt. false = so por convite do admin"
+  default     = true
+}
+
+variable "smtp_from_name" {
+  type        = string
+  description = "Nome exibido como remetente"
+  default     = "Passbolt"
+}

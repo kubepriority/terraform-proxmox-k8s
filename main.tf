@@ -10,17 +10,17 @@ resource "proxmox_virtual_environment_download_file" "ubuntu_cloud_image" {
 }
 
 module "bind9_server" {
-  source                 = "./modules/bind9_dnsserver"
-  proxmox_endpoint       = var.proxmox_endpoint
-  proxmox_user_name      = var.proxmox_user_name
-  proxmox_user_password  = var.proxmox_user_password
-  proxmox_vm_user        = var.proxmox_vm_user
-  proxmox_node_name      = var.proxmox_node_name
-  proxmox_datastore_name = var.proxmox_datastore_name
+  source                    = "./modules/bind9_dnsserver"
+  proxmox_endpoint          = var.proxmox_endpoint
+  proxmox_user_name         = var.proxmox_user_name
+  proxmox_user_password     = var.proxmox_user_password
+  proxmox_vm_user           = var.proxmox_vm_user
+  proxmox_node_name         = var.proxmox_node_name
+  proxmox_datastore_name    = var.proxmox_datastore_name
   proxmox_vm_datastore_name = var.proxmox_vm_datastore_name
-  proxmox_network_bridge = var.proxmox_network_bridge
-  proxmox_network_prefix = var.proxmox_network_prefix
-  vm_image_id            = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
+  proxmox_network_bridge    = var.proxmox_network_bridge
+  proxmox_network_prefix    = var.proxmox_network_prefix
+  vm_image_id               = proxmox_virtual_environment_download_file.ubuntu_cloud_image.id
 }
 
 module "proxmox" {
@@ -62,23 +62,31 @@ module "proxmox" {
 }
 
 module "k8s_addons" {
-  source                     = "./modules/k8s-addons"
-  gcp_sa_key_path            = var.gcp_sa_key_path
-  rancher_bootstrap_password = var.rancher_bootstrap_password
-  domain                     = var.domain
-  gcp_project                = var.gcp_project
-  metallb_pool               = local.metallb_pool
-  ingress_vip                = local.ingress_vip
-  rancher_hostname           = "rancher.${var.domain}"
-  argocd_hostname            = "argocd.${var.domain}"
-  passbolt_hostname          = "passbolt.${var.domain}"
-  enable_rancher             = var.enable_rancher
-  enable_metrics_server      = var.enable_metrics_server
-  enable_argocd              = var.enable_argocd
-  enable_passbolt            = var.enable_passbolt
-  storage_backend            = var.storage_backend
-  storage_replicas           = var.storage_replicas
-  rancher_chart_version      = var.rancher_chart_version
+  source                       = "./modules/k8s-addons"
+  gcp_sa_key_path              = var.gcp_sa_key_path
+  rancher_bootstrap_password   = var.rancher_bootstrap_password
+  domain                       = var.domain
+  gcp_project                  = var.gcp_project
+  metallb_pool                 = local.metallb_pool
+  ingress_vip                  = local.ingress_vip
+  rancher_hostname             = "rancher.${var.domain}"
+  argocd_hostname              = "argocd.${var.domain}"
+  passbolt_hostname            = "passbolt.${var.domain}"
+  enable_rancher               = var.enable_rancher
+  enable_metrics_server        = var.enable_metrics_server
+  enable_argocd                = var.enable_argocd
+  enable_passbolt              = var.enable_passbolt
+  storage_backend              = var.storage_backend
+  storage_replicas             = var.storage_replicas
+  rancher_chart_version        = var.rancher_chart_version
+  smtp_host                    = var.smtp_host
+  smtp_port                    = var.smtp_port
+  smtp_username                = var.smtp_username
+  smtp_password                = var.smtp_password
+  smtp_from                    = var.smtp_from
+  smtp_from_name               = var.smtp_from_name
+  passbolt_ha                  = var.passbolt_ha
+  passbolt_public_registration = var.passbolt_public_registration
 
   depends_on = [module.proxmox, null_resource.cluster_access]
 }

@@ -295,10 +295,10 @@ moved {
 }
 
 resource "helm_release" "rancher" {
-  count            = var.enable_rancher ? 1 : 0
-  name             = "rancher"
-  repository       = "https://releases.rancher.com/server-charts/stable"
-  chart            = "rancher"
+  count      = var.enable_rancher ? 1 : 0
+  name       = "rancher"
+  repository = "https://releases.rancher.com/server-charts/stable"
+  chart      = "rancher"
   # 2.13.x declara kubeVersion < 1.35.0-0 e o helm recusa instalar no k8s 1.35;
   # 2.14.x aceita ate < 1.36.0-0. Por workspace: default 2.13.3 (pve01, k8s 1.30),
   # pve02 (k8s 1.35.7) sobrescreve para 2.14.3 via rancher_chart_version.
@@ -407,35 +407,96 @@ resource "helm_release" "passbolt" {
   create_namespace = true
   timeout          = 900
 
-  values = [yamlencode({
-    passboltEnv = {
-      plain = {
-        APP_FULL_BASE_URL  = "https://${var.passbolt_hostname}"
-        PASSBOLT_SSL_FORCE = true
+  # passbolt_ha = false deixa a instancia unica (1 app, mariadb standalone,
+  # redis sem sentinel). Trocar de replication para standalone RENOMEIA o
+  # StatefulSet do mariadb, entao o PVC antigo vira orfao e o banco nasce
+  # vazio — so mude em cluster sem dados. SMTP so entra quando smtp_host esta
+  # preenchido; vazio mantem os defaults do chart.
+  # Camadas de values (helm faz deep merge, a ultima vence). Cada override so
+  # entra quando a flag correspondente sai do default, entao um cluster que nao
+  # usa nenhuma delas — o pve01 — continua recebendo exatamente o values antigo
+  # e nao sofre upgrade do release.
+  values = concat(
+    [yamlencode({
+      passboltEnv = {
+        plain = {
+          APP_FULL_BASE_URL  = "https://${var.passbolt_hostname}"
+          PASSBOLT_SSL_FORCE = true
+        }
       }
-    }
-    ingress = {
-      enabled   = true
-      className = "nginx"
-      annotations = {
-        "cert-manager.io/cluster-issuer"                = "letsencrypt-dns01-prd"
-        "nginx.ingress.kubernetes.io/backend-protocol"  = "HTTPS"
-      }
-      hosts = [{
-        host = var.passbolt_hostname
-        paths = [{
-          path     = "/"
-          port     = "https"
-          pathType = "ImplementationSpecific"
+      ingress = {
+        enabled   = true
+        className = "nginx"
+        annotations = {
+          "cert-manager.io/cluster-issuer"               = "letsencrypt-dns01-prd"
+          "nginx.ingress.kubernetes.io/backend-protocol" = "HTTPS"
+        }
+        hosts = [{
+          host = var.passbolt_hostname
+          paths = [{
+            path     = "/"
+            port     = "https"
+            pathType = "ImplementationSpecific"
+          }]
         }]
-      }]
-      tls = [{
-        autogenerate   = false
-        existingSecret = "passbolt-tls"
-        hosts          = [var.passbolt_hostname]
-      }]
-    }
-  })]
+        tls = [{
+          autogenerate   = false
+          existingSecret = "passbolt-tls"
+          hosts          = [var.passbolt_hostname]
+        }]
+      }
+    })],
+
+    # Instancia unica. Trocar replication -> standalone RENOMEIA o StatefulSet
+    # do mariadb: o PVC antigo vira orfao e o banco nasce vazio. So use em
+    # cluster sem dados.
+    var.passbolt_ha ? [] : [yamlencode({
+      replicaCount = 1
+      mariadb      = { architecture = "standalone" }
+      redis = {
+        architecture = "standalone"
+        sentinel     = { enabled = false }
+        replica      = { replicaCount = 0 }
+      }
+      # Sem sentinel o sidecar haproxy nao tem o que proxiar e o passbolt fica
+      # em CrashLoop batendo em 127.0.0.1:6379; aponta direto para o master.
+      app = {
+        cache = {
+          redis = {
+            sentinelProxy = { enabled = false }
+          }
+        }
+      }
+      passboltEnv = {
+        plain = {
+          CACHE_DEFAULT_HOST   = "passbolt-redis-master"
+          CACHE_CAKECORE_HOST  = "passbolt-redis-master"
+          CACHE_CAKEMODEL_HOST = "passbolt-redis-master"
+        }
+      }
+    })],
+
+    var.passbolt_public_registration ? [] : [yamlencode({
+      passboltEnv = { plain = { PASSBOLT_REGISTRATION_PUBLIC = false } }
+    })],
+
+    var.smtp_host == "" ? [] : [yamlencode({
+      passboltEnv = {
+        plain = {
+          EMAIL_DEFAULT_FROM              = var.smtp_from
+          EMAIL_DEFAULT_FROM_NAME         = var.smtp_from_name
+          EMAIL_TRANSPORT_DEFAULT_HOST    = var.smtp_host
+          EMAIL_TRANSPORT_DEFAULT_PORT    = var.smtp_port
+          EMAIL_TRANSPORT_DEFAULT_TLS     = true
+          EMAIL_TRANSPORT_DEFAULT_TIMEOUT = 30
+        }
+        secret = {
+          EMAIL_TRANSPORT_DEFAULT_USERNAME = var.smtp_username
+          EMAIL_TRANSPORT_DEFAULT_PASSWORD = var.smtp_password
+        }
+      }
+    })]
+  )
 
   depends_on = [helm_release.cert_infra, helm_release.ingress_nginx, helm_release.longhorn_classes, helm_release.rook_ceph_cluster]
 }
